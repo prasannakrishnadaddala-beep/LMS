@@ -296,6 +296,64 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 
 /* RATE TAG */
 .rate-tag{display:inline-flex;align-items:center;gap:5px;background:rgba(200,151,46,.1);border:1px solid rgba(200,151,46,.3);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;color:#7a5c1a;}
+
+/* ── SOURCE BADGES ────────────────────────────────────────────────────────── */
+.src-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:0.3px;border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:middle;}
+.src-badge.payslip{background:#dcfce7;color:#15803d;}
+.src-badge.bank{background:#dbeafe;color:#1d4ed8;}
+.src-badge.cibil{background:#fef9c3;color:#854d0e;}
+.src-badge.manual{background:#f3f4f6;color:#6b7280;}
+.field input.locked-payslip{border-color:#15803d!important;background:#f0fdf4!important;box-shadow:0 0 0 3px rgba(21,128,61,.08)!important;}
+.field select.locked-payslip{border-color:#15803d!important;background:#f0fdf4!important;}
+
+/* ── PAYSLIP UPLOAD SECTION ──────────────────────────────────────────────── */
+.ps-upload-area{
+  border:2px dashed rgba(21,128,61,.3);border-radius:10px;
+  padding:20px;text-align:center;cursor:pointer;
+  transition:border-color .2s,background .2s;background:#f0fdf4;
+  position:relative;
+}
+.ps-upload-area:hover,.ps-upload-area.drag-over{border-color:#15803d;background:#dcfce7;}
+.ps-upload-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.ps-upload-icon{font-size:32px;margin-bottom:8px;}
+.ps-upload-title{font-size:13px;font-weight:600;color:#14532d;margin-bottom:3px;}
+.ps-upload-sub{font-size:11px;color:var(--muted);}
+
+.ps-parsing{display:none;text-align:center;padding:16px;}
+.ps-parsing .ps-spinner{width:28px;height:28px;border:3px solid #bbf7d0;border-top-color:#15803d;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px;}
+.ps-parsing p{font-size:12px;color:#15803d;font-weight:500;}
+
+.ps-result{display:none;background:#f0fdf4;border:1px solid rgba(21,128,61,.2);border-radius:10px;padding:14px;}
+.ps-result-badge{display:inline-flex;align-items:center;gap:5px;background:#15803d;color:white;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:0.3px;}
+.ps-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+.ps-metric{background:white;border-radius:7px;padding:8px 10px;text-align:center;border:1px solid rgba(21,128,61,.12);}
+.ps-metric .pm-val{font-size:14px;font-weight:700;color:#14532d;font-family:'DM Serif Display',serif;}
+.ps-metric .pm-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-top:2px;}
+.ps-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.ps-chip{font-size:11px;padding:3px 9px;border-radius:5px;font-weight:600;}
+.ps-chip.ok{background:#d1fae5;color:#065f46;}
+.ps-chip.warn{background:#fef3c7;color:#92400e;}
+.ps-clear{float:right;font-size:11px;color:#15803d;cursor:pointer;text-decoration:underline;border:none;background:none;font-family:'DM Sans',sans-serif;}
+.ps-error{display:none;background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:12px;color:#991b1b;}
+.ps-notes{font-size:11px;color:#166534;margin-top:8px;font-style:italic;}
+
+.ps-pdf-pending{display:none;background:#f0fdf4;border:2px solid rgba(21,128,61,.35);border-radius:10px;padding:16px;}
+.ps-pdf-pending.visible{display:block;}
+.ps-pdf-pending-name{font-size:12px;font-weight:600;color:#14532d;margin-bottom:10px;display:flex;align-items:center;gap:7px;}
+.ps-pdf-pw-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+.ps-pdf-pw-row input[type=text]{flex:1;padding:8px 11px;border:1.5px solid rgba(21,128,61,.4);border-radius:7px;font-size:13px;font-family:'DM Sans',sans-serif;color:#1a1a1a;background:#fafffe;outline:none;transition:border-color .2s;}
+.ps-pdf-pw-row input[type=text]:focus{border-color:#15803d;}
+.ps-pdf-pw-parse-btn{padding:8px 16px;background:#15803d;color:white;border:none;border-radius:7px;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;transition:background .15s;}
+.ps-pdf-pw-parse-btn:hover{background:#14532d;}
+.ps-pdf-pw-cancel{font-size:11px;color:#15803d;background:none;border:none;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif;padding:0;}
+
+/* Confidence score indicator */
+.confidence-bar{height:4px;border-radius:2px;background:#e5e7eb;margin-top:6px;overflow:hidden;}
+.confidence-bar-fill{height:100%;border-radius:2px;transition:width .5s;}
+
+/* Re-decision hints */
+.redecision-box{background:rgba(21,101,192,.05);border:1px solid rgba(21,101,192,.2);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--info);line-height:1.6;}
+.redecision-box strong{display:block;margin-bottom:4px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;}
 </style>
 </head>
 <body>
@@ -444,6 +502,71 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ── PAYSLIP UPLOAD (HIGHEST PRIORITY — locks employment & income) ──────────── -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon green">🧾</div>
+    <span class="section-title">Payslip Upload</span>
+    <span class="section-subtitle" style="color:#15803d;font-weight:600;">⭐ Highest Priority — Locks Employment & Income</span>
+  </div>
+  <div class="section-body">
+    <!-- Upload area -->
+    <div id="psUploadArea" class="ps-upload-area" ondragover="psDrag(event,true)" ondragleave="psDrag(event,false)" ondrop="psDrop(event)">
+      <input type="file" id="psFileInput" accept=".pdf" onchange="psFileSelected(this.files[0])"/>
+      <div class="ps-upload-icon">🧾</div>
+      <div class="ps-upload-title">Drop Salary Slip / Payslip PDF here or click to upload</div>
+      <div class="ps-upload-sub">Last 1–3 months payslip · Max 15 MB · All formats supported</div>
+    </div>
+
+    <!-- Password prompt -->
+    <div id="psPending" class="ps-pdf-pending">
+      <div class="ps-pdf-pending-name">📎 <span id="psPendingName"></span></div>
+      <div class="ps-pdf-pw-row">
+        <input type="text" id="psPasswordInput" placeholder="PDF password (leave blank if not protected)" autocomplete="off"/>
+        <button type="button" class="ps-pdf-pw-parse-btn" onclick="uploadPayslip()">🔍 Parse Payslip</button>
+      </div>
+      <div style="font-size:10px;color:#15803d;margin-top:2px;">🔒 Some payslips are password-protected (usually PAN or DOB)</div>
+      <button type="button" class="ps-pdf-pw-cancel" onclick="clearPayslip()">✕ Cancel</button>
+    </div>
+
+    <!-- Spinner -->
+    <div id="psParsing" class="ps-parsing">
+      <div class="ps-spinner"></div>
+      <p>Extracting payslip data with AI…</p>
+    </div>
+
+    <!-- Result -->
+    <div id="psResult" class="ps-result">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="ps-result-badge">✅ Payslip Auto-Filled — Priority Locked</div>
+        <button type="button" class="ps-clear" onclick="clearPayslip()">✕ Clear & re-upload</button>
+      </div>
+      <div class="ps-metrics" id="psMetrics"></div>
+      <div class="ps-chips" id="psChips"></div>
+      <div class="ps-notes" id="psNotes"></div>
+    </div>
+
+    <!-- Error -->
+    <div id="psError" class="ps-error">
+      ⚠️ <span id="psErrorMsg"></span>
+      <button type="button" style="margin-left:8px;font-size:11px;color:#991b1b;background:none;border:none;cursor:pointer;text-decoration:underline;" onclick="clearPayslip()">Try again</button>
+    </div>
+
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);">
+      📌 Payslip overrides CIBIL/bank employment inferences. Employment &amp; income fields will be <strong>locked</strong> to payslip values.
+    </div>
+
+    <!-- Hidden inputs for payslip data -->
+    <input type="hidden" name="payslip_pdf_parsed" id="psParsedInput"   value="no"/>
+    <input type="hidden" name="ps_employer_name"   id="psEmployerInput" value=""/>
+    <input type="hidden" name="ps_employment_type" id="psEmpTypeInput"  value=""/>
+    <input type="hidden" name="ps_net_salary"      id="psNetSalInput"   value="0"/>
+    <input type="hidden" name="ps_gross_salary"    id="psGrossSalInput" value="0"/>
+    <input type="hidden" name="ps_employee_name"   id="psEmpNameInput"  value=""/>
+    <input type="hidden" name="ps_designation"     id="psDesigInput"    value=""/>
   </div>
 </div>
 
@@ -802,6 +925,17 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
       </div>
     </div>
 
+    <!-- Re-decision hints (if rejected) -->
+    <div class="res-card" id="redecisionCard" style="display:none">
+      <div class="res-card-head">🔁 How to Qualify — Re-Decision Path</div>
+      <div class="res-card-body">
+        <div class="redecision-box">
+          <strong>Steps to improve eligibility</strong>
+          <span id="redecisionText"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- Strengths & Concerns -->
     <div class="res-card">
       <div class="res-card-head">⚖️ Strengths & Concerns</div>
@@ -839,6 +973,204 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 </div><!-- /page -->
 
 <script>
+// ── DOCUMENT SOURCE PRIORITY STATE ────────────────────────────────────────────
+// Tracks which fields are locked by higher-priority documents
+const _locks = {};  // fieldName → 'PAYSLIP' | 'BANK' | 'CIBIL'
+
+function lockField(fieldId, source) {
+  const el = document.getElementById(fieldId) || document.querySelector(`[name=${fieldId}]`);
+  if (!el) return;
+  _locks[fieldId] = source;
+  if (source === 'PAYSLIP') {
+    el.classList.add('locked-payslip');
+    el.classList.remove('auto-filled');
+  } else {
+    el.classList.add('auto-filled');
+  }
+  el.dataset.lockedBy = source;
+}
+
+function canOverride(fieldId, newSource) {
+  const priority = { PAYSLIP: 3, BANK: 2, CIBIL: 1, MANUAL: 0 };
+  const existing = _locks[fieldId];
+  if (!existing) return true;
+  return (priority[newSource] || 0) > (priority[existing] || 0);
+}
+
+function unlockField(fieldId) {
+  delete _locks[fieldId];
+  const el = document.getElementById(fieldId) || document.querySelector(`[name=${fieldId}]`);
+  if (el) {
+    el.classList.remove('locked-payslip', 'auto-filled');
+    delete el.dataset.lockedBy;
+  }
+}
+
+function setFieldValue(fieldId, value, source) {
+  if (!canOverride(fieldId, source)) return false;
+  const el = document.getElementById(fieldId) || document.querySelector(`[name=${fieldId}]`);
+  if (!el || value === null || value === undefined) return false;
+  el.value = value;
+  lockField(fieldId, source);
+  return true;
+}
+
+// ── PAYSLIP UPLOAD ────────────────────────────────────────────────────────────
+let _psPendingFile = null;
+
+function psDrag(e, over) {
+  e.preventDefault();
+  document.getElementById('psUploadArea').classList.toggle('drag-over', over);
+}
+function psDrop(e) {
+  e.preventDefault();
+  document.getElementById('psUploadArea').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) psFileSelected(file);
+}
+
+function psFileSelected(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) { showPsError('Only PDF files are supported.'); return; }
+  if (file.size > 15 * 1024 * 1024) { showPsError('File too large. Maximum size is 15 MB.'); return; }
+  _psPendingFile = file;
+  document.getElementById('psUploadArea').style.display = 'none';
+  document.getElementById('psPendingName').textContent = file.name;
+  document.getElementById('psPending').classList.add('visible');
+  document.getElementById('psPasswordInput').focus();
+}
+
+async function uploadPayslip() {
+  const file = _psPendingFile;
+  if (!file) return;
+  document.getElementById('psPending').classList.remove('visible');
+  document.getElementById('psResult').style.display  = 'none';
+  document.getElementById('psError').style.display   = 'none';
+  document.getElementById('psParsing').style.display = 'block';
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('pdf_password', document.getElementById('psPasswordInput').value || '');
+
+  try {
+    const res  = await fetch('/parse-payslip', { method: 'POST', body: fd });
+    const json = await res.json();
+    document.getElementById('psParsing').style.display = 'none';
+    if (!res.ok || json.error) {
+      if (json.error && json.error.toLowerCase().includes('password')) {
+        document.getElementById('psPending').classList.add('visible');
+        document.getElementById('psPasswordInput').style.borderColor = '#ef4444';
+        document.getElementById('psPasswordInput').placeholder = json.error;
+      } else {
+        showPsError(json.error || 'Parsing failed. Please try again.');
+      }
+      return;
+    }
+    autofillPayslip(json.data);
+  } catch(err) {
+    document.getElementById('psParsing').style.display = 'none';
+    showPsError('Network error. Please try again.');
+  }
+}
+
+function autofillPayslip(d) {
+  // Set hidden inputs
+  document.getElementById('psParsedInput').value   = 'yes';
+  document.getElementById('psEmployerInput').value = d.employer_name   || '';
+  document.getElementById('psEmpTypeInput').value  = d.employment_type || '';
+  document.getElementById('psNetSalInput').value   = d.net_salary      || 0;
+  document.getElementById('psGrossSalInput').value = d.gross_salary    || 0;
+  document.getElementById('psEmpNameInput').value  = d.employee_name   || '';
+  document.getElementById('psDesigInput').value    = d.designation     || '';
+
+  // ── Priority-lock employment fields (PAYSLIP = highest) ──────────────────
+  if (d.employee_name) {
+    setFieldValue('f_full_name', d.employee_name, 'PAYSLIP');
+    markAutoTag('tag_full_name', true, 'PAYSLIP');
+  }
+  if (d.employer_name) {
+    setFieldValue('employer_name', d.employer_name, 'PAYSLIP');
+  }
+  if (d.employment_type) {
+    const empTypeField = document.getElementById('f_employment_type');
+    if (empTypeField && canOverride('f_employment_type', 'PAYSLIP')) {
+      for (let opt of empTypeField.options) {
+        if (opt.value === d.employment_type) { opt.selected = true; break; }
+      }
+      lockField('f_employment_type', 'PAYSLIP');
+    }
+  }
+  // Income: payslip net salary overrides everything
+  if (d.net_salary > 0) {
+    setFieldValue('monthly_income', Math.round(d.net_salary), 'PAYSLIP');
+  }
+
+  // Store for cross-check
+  window._psExtractedName = (d.employee_name || '').trim().toLowerCase();
+
+  // Build metrics display
+  const fmt = n => '₹' + Number(n||0).toLocaleString('en-IN');
+  const metrics = [
+    { val: d.employer_name || 'N/A',         lbl: 'Employer' },
+    { val: fmt(d.gross_salary),              lbl: 'Gross Salary' },
+    { val: fmt(d.net_salary),               lbl: 'Net Take-Home' },
+    { val: fmt(d.pf_deduction || 0),        lbl: 'PF Deduction' },
+    { val: fmt(d.tds_deduction || 0),       lbl: 'TDS Deducted' },
+    { val: d.pay_period || 'Extracted',     lbl: 'Pay Period' },
+  ];
+  document.getElementById('psMetrics').innerHTML = metrics.map(m =>
+    `<div class="ps-metric"><div class="pm-val">${m.val}</div><div class="pm-lbl">${m.lbl}</div></div>`
+  ).join('');
+
+  // Chips
+  const chips = [];
+  if (d.employee_name) chips.push({ text: `👤 ${d.employee_name}`, cls:'ok' });
+  if (d.employer_name) chips.push({ text: `🏢 ${d.employer_name}`, cls:'ok' });
+  if (d.designation)   chips.push({ text: `💼 ${d.designation}`, cls:'ok' });
+  if (d.employment_type) chips.push({ text: d.employment_type, cls:'ok' });
+  if (d.net_salary > 0)  chips.push({ text: `Net ₹${Math.round(d.net_salary/1000)}K/mo`, cls:'ok' });
+  if (d.uan_number)   chips.push({ text: `UAN: ${d.uan_number}`, cls:'ok' });
+  if (d.pan_number)   chips.push({ text: `PAN: ${d.pan_number}`, cls:'ok' });
+  const deductionPct = d.gross_salary > 0 ? Math.round((d.total_deductions||0) / d.gross_salary * 100) : 0;
+  if (deductionPct > 0) chips.push({ text: `${deductionPct}% deductions`, cls: deductionPct > 35 ? 'warn' : 'ok' });
+
+  document.getElementById('psChips').innerHTML =
+    chips.map(c => `<span class="ps-chip ${c.cls}">${c.text}</span>`).join('');
+
+  if (d.extraction_notes)
+    document.getElementById('psNotes').textContent = '📝 ' + d.extraction_notes;
+
+  document.getElementById('psResult').style.display = 'block';
+  checkNameMismatch();
+}
+
+function showPsError(msg) {
+  document.getElementById('psUploadArea').style.display = '';
+  document.getElementById('psPending').classList.remove('visible');
+  document.getElementById('psError').style.display = 'block';
+  document.getElementById('psErrorMsg').textContent = msg;
+}
+
+function clearPayslip() {
+  _psPendingFile = null;
+  document.getElementById('psParsedInput').value = 'no';
+  ['psEmployerInput','psEmpTypeInput','psNetSalInput','psGrossSalInput','psEmpNameInput','psDesigInput']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = el.id.includes('Sal') ? '0' : ''; });
+  document.getElementById('psUploadArea').style.display = '';
+  document.getElementById('psPending').classList.remove('visible');
+  document.getElementById('psResult').style.display  = 'none';
+  document.getElementById('psError').style.display   = 'none';
+  document.getElementById('psParsing').style.display = 'none';
+  document.getElementById('psFileInput').value = '';
+  document.getElementById('psPasswordInput').value = '';
+  window._psExtractedName = '';
+  // Unlock payslip-locked fields
+  ['f_full_name','employer_name','f_employment_type','monthly_income'].forEach(id => {
+    if (_locks[id] === 'PAYSLIP') unlockField(id);
+  });
+}
+
+
 const PRODUCT_HINTS = {
   "Personal Loan":           "💳 <strong>Underwriting focus:</strong> Income stability + clean credit. FOIR must stay below 50%. No collateral required. Min CIBIL 700.",
   "Home Loan":               "🏠 <strong>LTV max 80%</strong> of market value. EC 30 years + approved plan mandatory. RERA registration preferred. Min CIBIL 650.",
@@ -973,18 +1305,22 @@ document.addEventListener('DOMContentLoaded', () => {
   if (pw) pw.addEventListener('keydown', e => { if (e.key === 'Enter') uploadCibil(); });
   const bsPw = document.getElementById('bsPasswordInput');
   if (bsPw) bsPw.addEventListener('keydown', e => { if (e.key === 'Enter') uploadBankStmt(); });
+  const psPw = document.getElementById('psPasswordInput');
+  if (psPw) psPw.addEventListener('keydown', e => { if (e.key === 'Enter') uploadPayslip(); });
 });
 
 function autofillBureau(d) {
   // Fill hidden flag
   document.getElementById('cibilPdfParsedInput').value = 'yes';
 
-  // ── Auto-fill APPLICANT PROFILE from CIBIL ──────────────────────────────
+  // ── Auto-fill APPLICANT PROFILE from CIBIL (only if not locked by payslip) ──
   const nameField = document.getElementById('f_full_name');
-  if (nameField && d.full_name && !nameField.value.trim()) {
-    nameField.value = d.full_name;
-    nameField.classList.add('auto-filled');
-    markAutoTag('tag_full_name', true);
+  if (nameField && d.full_name && canOverride('f_full_name', 'CIBIL')) {
+    if (!nameField.value.trim()) {
+      nameField.value = d.full_name;
+      lockField('f_full_name', 'CIBIL');
+      markAutoTag('tag_full_name', true, 'CIBIL');
+    }
   }
 
   // Age from DOB or direct age field
@@ -992,22 +1328,21 @@ function autofillBureau(d) {
   if (ageField && !ageField.value && d.age) {
     ageField.value = d.age;
     ageField.classList.add('auto-filled');
-    markAutoTag('tag_age', true);
+    markAutoTag('tag_age', true, 'CIBIL');
   } else if (ageField && !ageField.value && d.date_of_birth) {
-    // Compute age from DOB
     const computed = computeAgeFromDOB(d.date_of_birth);
-    if (computed) { ageField.value = computed; ageField.classList.add('auto-filled'); markAutoTag('tag_age', true); }
+    if (computed) { ageField.value = computed; ageField.classList.add('auto-filled'); markAutoTag('tag_age', true, 'CIBIL'); }
   }
 
   // ── Auto-fill BUREAU fields ──────────────────────────────────────────────
   const map = {
-    'f_cibil_score':             d.cibil_score,
-    'f_credit_vintage_yrs':      d.credit_vintage_yrs,
-    'f_enquiries_6m':            d.enquiries_6m,
-    'f_dpd_30_count':            d.dpd_30_count,
-    'f_dpd_60_count':            d.dpd_60_count,
-    'f_dpd_90_count':            d.dpd_90_count,
-    'f_existing_emi_total':      d.existing_emi_total,
+    'f_cibil_score':        d.cibil_score,
+    'f_credit_vintage_yrs': d.credit_vintage_yrs,
+    'f_enquiries_6m':       d.enquiries_6m,
+    'f_dpd_30_count':       d.dpd_30_count,
+    'f_dpd_60_count':       d.dpd_60_count,
+    'f_dpd_90_count':       d.dpd_90_count,
+    'f_existing_emi_total': d.existing_emi_total,
   };
   const tagMap = {
     'tag_cibil_score':    'f_cibil_score',
@@ -1030,12 +1365,12 @@ function autofillBureau(d) {
     const el = document.getElementById(tagId);
     const field = document.getElementById(fieldId);
     if (el && field && field.classList.contains('auto-filled')) {
-      el.innerHTML = '<span class="auto-tag">AUTO</span>';
+      el.innerHTML = sourceBadge('CIBIL');
     }
   });
 
   if (d.existing_emi_total > 0) {
-    document.getElementById('emiAutoTag').innerHTML = '<span class="auto-tag">AUTO</span>';
+    document.getElementById('emiAutoTag').innerHTML = sourceBadge('CIBIL');
   }
 
   // Write-off toggle
@@ -1044,7 +1379,7 @@ function autofillBureau(d) {
   } else {
     document.getElementById('wo_no').checked = true;
   }
-  document.getElementById('tag_writeoff').innerHTML = '<span class="auto-tag">AUTO</span>';
+  document.getElementById('tag_writeoff').innerHTML = sourceBadge('CIBIL');
 
   // Secured/unsecured select
   const mixSel = document.getElementById('f_secured_unsecured_ratio');
@@ -1052,32 +1387,32 @@ function autofillBureau(d) {
     for (let opt of mixSel.options) {
       if (opt.value === d.secured_unsecured_ratio) { opt.selected = true; break; }
     }
-    document.getElementById('tag_mix').innerHTML = '<span class="auto-tag">AUTO</span>';
+    document.getElementById('tag_mix').innerHTML = sourceBadge('CIBIL');
   }
 
-  // ── Employment autofill from CIBIL ──────────────────────────────────────
-  if (d.employer_name) {
+  // ── Employment autofill from CIBIL — ONLY if payslip hasn't locked it ────
+  if (d.employer_name && canOverride('employer_name', 'CIBIL')) {
     const empNameField = document.querySelector('[name=employer_name]');
     if (empNameField && !empNameField.value.trim()) {
       empNameField.value = d.employer_name;
-      empNameField.classList.add('auto-filled');
+      lockField('employer_name', 'CIBIL');
     }
   }
-  if (d.employment_type) {
+  if (d.employment_type && canOverride('f_employment_type', 'CIBIL')) {
     const empTypeField = document.getElementById('f_employment_type');
     if (empTypeField) {
       for (let opt of empTypeField.options) {
         if (opt.value === d.employment_type) { opt.selected = true; break; }
       }
-      empTypeField.classList.add('auto-filled');
+      lockField('f_employment_type', 'CIBIL');
     }
   }
-  // Monthly income from CIBIL if bank statement hasn't filled it
-  if (d.monthly_income > 0) {
+  // Monthly income from CIBIL if not already locked
+  if (d.monthly_income > 0 && canOverride('monthly_income', 'CIBIL')) {
     const incomeField = document.querySelector('[name=monthly_income]');
     if (incomeField && !incomeField.value) {
       incomeField.value = Math.round(d.monthly_income);
-      incomeField.classList.add('auto-filled');
+      lockField('monthly_income', 'CIBIL');
     }
   }
 
@@ -1109,6 +1444,8 @@ function autofillBureau(d) {
 
   if (d.total_active_loans) chips.push({text:`${d.total_active_loans} active loans`, cls:'ok'});
   if (d.credit_vintage_yrs >= 5) chips.push({text:`${d.credit_vintage_yrs}yr vintage`, cls:'ok'});
+  if (d.employer_name && _locks['employer_name'] === 'CIBIL')
+    chips.push({text:`⚠️ Employer from CIBIL (unverified)`, cls:'warn'});
 
   document.getElementById('cibilChips').innerHTML =
     chips.map(c => `<span class="cibil-chip ${c.cls}">${c.text}</span>`).join('');
@@ -1126,7 +1463,6 @@ function autofillBureau(d) {
 
 function computeAgeFromDOB(dob) {
   if (!dob) return null;
-  // Handle DD/MM/YYYY or YYYY-MM-DD
   let d;
   if (dob.includes('/')) {
     const parts = dob.split('/');
@@ -1141,12 +1477,144 @@ function computeAgeFromDOB(dob) {
   return (age > 0 && age < 120) ? age : null;
 }
 
-function markAutoTag(tagId, show) {
-  const el = document.getElementById(tagId);
-  if (el) el.innerHTML = show ? '<span class="auto-tag">AUTO</span>' : '';
+function sourceBadge(source) {
+  const cfg = {
+    PAYSLIP: { cls: 'payslip', icon: '🧾', label: 'PAYSLIP' },
+    BANK:    { cls: 'bank',    icon: '🏦', label: 'BANK' },
+    CIBIL:   { cls: 'cibil',  icon: '📄', label: 'CIBIL' },
+    MANUAL:  { cls: 'manual', icon: '✏️', label: 'MANUAL' },
+  }[source] || { cls: 'manual', icon: '', label: source };
+  return `<span class="src-badge ${cfg.cls}">${cfg.icon} ${cfg.label}</span>`;
 }
 
-function showCibilError(msg) {
+function markAutoTag(tagId, show, source = 'CIBIL') {
+  const el = document.getElementById(tagId);
+  if (el) el.innerHTML = show ? sourceBadge(source) : '';
+}
+
+function autofillBankStmt(d) {
+  // Set hidden inputs
+  document.getElementById('bsParsedInput').value    = 'yes';
+  document.getElementById('bsSalaryInput').value    = d.salary_amount || 0;
+  document.getElementById('bsAmbInput').value       = d.avg_monthly_balance || 0;
+  document.getElementById('bsBounceInput').value    = d.outward_cheque_returns || d.bounce_count || 0;
+  document.getElementById('bsEmiInput').value       = d.emi_debits_detected || 0;
+  document.getElementById('bsLargeCredInput').value = d.large_unusual_credits || 0;
+  document.getElementById('bsCdRatioInput').value   = d.credit_debit_ratio || 0;
+  document.getElementById('bsMonthsInput').value    = d.statement_months || 0;
+  document.getElementById('bsUpiInput').value       = d.upi_credits_monthly_avg || 0;
+  document.getElementById('bsEmiCountInput').value  = d.emi_accounts_count || 0;
+
+  // ── Auto-fill APPLICANT PROFILE from bank statement (if not locked) ──────
+  if (d.account_holder && canOverride('f_full_name', 'BANK')) {
+    const nameField = document.getElementById('f_full_name');
+    if (nameField && !nameField.value.trim()) {
+      nameField.value = d.account_holder;
+      lockField('f_full_name', 'BANK');
+      markAutoTag('tag_full_name', true, 'BANK');
+    }
+  }
+
+  // Store for cross-check
+  window._bsExtractedName = (d.account_holder || '').trim().toLowerCase();
+
+  // ── Auto-fill visible financial form fields ──────────────────────────────
+  const amb = d.avg_monthly_balance;
+  if (amb > 0) {
+    const ambField = document.querySelector('[name=avg_monthly_balance]');
+    if (ambField) { ambField.value = Math.round(amb); ambField.classList.add('auto-filled'); }
+  }
+  const bounce = d.outward_cheque_returns || d.bounce_count || 0;
+  if (bounce > 0) {
+    const bounceField = document.querySelector('[name=bounce_count_6m]');
+    if (bounceField) { bounceField.value = bounce; bounceField.classList.add('auto-filled'); }
+  }
+  const emi = d.emi_debits_detected || 0;
+  if (emi > 0) {
+    const emiField = document.querySelector('[name=existing_emi_total]');
+    if (emiField && parseFloat(emiField.value || 0) < emi) {
+      emiField.value = Math.round(emi); emiField.classList.add('auto-filled');
+    }
+  }
+  // Salary autofill — only if payslip hasn't locked income
+  if (d.salary_amount > 0 && canOverride('monthly_income', 'BANK')) {
+    const incomeField = document.querySelector('[name=monthly_income]');
+    if (incomeField && !incomeField.value) {
+      incomeField.value = Math.round(d.salary_amount);
+      lockField('monthly_income', 'BANK');
+    }
+  }
+  // Expenses autofill from avg monthly debit (proxy for total outflows)
+  if (d.avg_monthly_debit > 0) {
+    const expField = document.querySelector('[name=monthly_expenses]');
+    if (expField && !expField.value) {
+      const emiDebits = d.emi_debits_detected || 0;
+      const estimatedExpenses = Math.max(0, Math.round(d.avg_monthly_debit - emiDebits));
+      if (estimatedExpenses > 0) {
+        expField.value = estimatedExpenses;
+        expField.classList.add('auto-filled');
+      }
+    }
+  }
+  if (d.salary_credit_regular === false) {
+    document.getElementById('scr_no').checked = true;
+  } else if (d.salary_credit_regular === true) {
+    document.getElementById('scr_yes').checked = true;
+  }
+
+  // ── Build metrics display ────────────────────────────────────────────────
+  const fmt = n => '₹' + Number(n||0).toLocaleString('en-IN');
+  const metrics = [
+    { val: fmt(d.avg_monthly_balance), lbl: 'Avg Balance' },
+    { val: fmt(d.avg_monthly_credit),  lbl: 'Avg Monthly Credits' },
+    { val: fmt(d.emi_debits_detected), lbl: 'EMI Debits Detected' },
+    { val: (d.outward_cheque_returns || d.bounce_count || 0) + ' bounces', lbl: 'Cheque Returns' },
+    { val: (d.statement_months || '?') + ' months', lbl: 'Statement Period' },
+    { val: d.credit_debit_ratio ? d.credit_debit_ratio + 'x' : '—', lbl: 'Credit/Debit Ratio' },
+  ];
+  document.getElementById('bsMetrics').innerHTML = metrics.map(m =>
+    `<div class="bs-metric"><div class="bm-val">${m.val}</div><div class="bm-lbl">${m.lbl}</div></div>`
+  ).join('');
+
+  // ── Chips ────────────────────────────────────────────────────────────────
+  const chips = [];
+  if (d.account_holder) chips.push({ text: `👤 ${d.account_holder}`, cls:'ok' });
+  if (d.bank_name) chips.push({ text: `🏦 ${d.bank_name}`, cls:'ok' });
+  if (d.account_type) chips.push({ text: d.account_type + ' A/C', cls:'ok' });
+
+  const declIncome = parseFloat(document.querySelector('[name=monthly_income]')?.value || 0);
+  const bsSalary   = d.salary_amount || 0;
+  if (bsSalary > 0 && declIncome > 0) {
+    if (Math.abs(bsSalary - declIncome) / declIncome < 0.2)
+      chips.push({ text: `Salary verified ₹${Math.round(bsSalary/1000)}K`, cls:'ok' });
+    else
+      chips.push({ text: `Salary mismatch: stmt ₹${Math.round(bsSalary/1000)}K vs declared ₹${Math.round(declIncome/1000)}K`, cls:'warn' });
+  }
+  if (d.salary_credit_regular === true)  chips.push({ text:'Regular salary credits', cls:'ok' });
+  if (d.salary_credit_regular === false) chips.push({ text:'Irregular salary credits', cls:'warn' });
+  const bnc = d.outward_cheque_returns || d.bounce_count || 0;
+  if (bnc === 0)  chips.push({ text:'0 cheque returns', cls:'ok' });
+  else if (bnc <= 2) chips.push({ text: bnc + ' cheque return(s)', cls:'warn' });
+  else chips.push({ text: bnc + ' cheque returns', cls:'bad' });
+  if (d.emi_accounts_count > 0) chips.push({ text: d.emi_accounts_count + ' EMI account(s) detected', cls:'warn' });
+  if (d.large_unusual_credits >= 3) chips.push({ text: d.large_unusual_credits + ' unusual large credits', cls:'warn' });
+  const cdr = d.credit_debit_ratio || 0;
+  if (cdr >= 1.3) chips.push({ text:'Healthy cash surplus', cls:'ok' });
+  else if (cdr >= 1.0) chips.push({ text:'Balanced cash flow', cls:'ok' });
+  else if (cdr > 0) chips.push({ text:'Cash flow stress detected', cls:'bad' });
+
+  document.getElementById('bsChips').innerHTML =
+    chips.map(c => `<span class="bs-chip ${c.cls}">${c.text}</span>`).join('');
+
+  if (d.extraction_notes)
+    document.getElementById('bsNotes').textContent = '📝 ' + d.extraction_notes;
+
+  document.getElementById('bsResult').style.display = 'block';
+
+  // ── Cross-document checks ────────────────────────────────────────────────
+  checkNameMismatch();
+  checkCrossDocFraud(d, declIncome);
+}
   document.getElementById('cibilUploadArea').style.display = '';
   document.getElementById('cibilPending').classList.remove('visible');
   document.getElementById('cibilError').style.display = 'block';
@@ -1369,18 +1837,24 @@ function autofillBankStmt(d) {
 function checkNameMismatch() {
   const cName = (window._cibilExtractedName || '').trim();
   const bName = (window._bsExtractedName  || '').trim();
-  if (!cName || !bName) return;
+  const pName = (window._psExtractedName  || '').trim();
 
-  // Simple similarity: check if one contains key words of the other
-  const cWords = cName.split(/\s+/).filter(w => w.length > 2);
-  const bWords = bName.split(/\s+/).filter(w => w.length > 2);
-  const overlap = cWords.filter(w => bWords.some(bw => bw.includes(w) || w.includes(bw)));
+  // Compare whichever two are available
+  const names = [cName, bName, pName].filter(Boolean);
+  if (names.length < 2) return;
+
+  const [n1, n2] = names;
+  const words1 = n1.split(/\s+/).filter(w => w.length > 2);
+  const words2 = n2.split(/\s+/).filter(w => w.length > 2);
+  const overlap = words1.filter(w => words2.some(bw => bw.includes(w) || w.includes(bw)));
 
   const warn = document.getElementById('nameMismatchWarn');
-  if (overlap.length === 0 && cWords.length > 0 && bWords.length > 0) {
+  if (overlap.length === 0 && words1.length > 0 && words2.length > 0) {
     warn.style.display = 'block';
+    const src1 = pName ? 'Payslip' : 'CIBIL';
+    const src2 = bName ? 'Bank Stmt' : 'CIBIL';
     document.getElementById('nameMismatchMsg').textContent =
-      `CIBIL shows "${window._cibilExtractedName.toUpperCase()}" but bank statement shows "${window._bsExtractedName.toUpperCase()}"`;
+      `${src1} shows "${names[0].toUpperCase()}" but ${src2} shows "${names[1].toUpperCase()}"`;
   } else {
     warn.style.display = 'none';
   }
@@ -1485,13 +1959,24 @@ function renderResult(d) {
   const hdr = document.getElementById('decisionHeader');
   hdr.className = 'decision-header ' + dec;
   const icons = { APPROVED:'✅', REJECTED:'❌', CONDITIONAL:'⚠️' };
-  document.getElementById('dhBadge').innerHTML =
-    icons[dec] + '  ' + dec +
-    (d.cibil_pdf_parsed    ? ' <span class="dh-cibil-badge">📄 CIBIL PDF</span>'       : '') +
-    (d.bank_statement_parsed ? ' <span class="dh-cibil-badge" style="background:rgba(21,101,192,.3);border-color:rgba(180,210,255,.4)">🏦 Bank Stmt</span>' : '') +
-    (d.fraud_flags && d.fraud_flags.length > 0 ? ` <span class="dh-cibil-badge" style="background:rgba(245,158,11,.3);border-color:rgba(245,200,50,.4)">⚠️ ${d.fraud_flags.length} Fraud Flag${d.fraud_flags.length>1?'s':''}</span>` : '');
+
+  // Document verification badges
+  const docBadges = [
+    d.payslip_pdf_parsed    ? '<span class="dh-cibil-badge" style="background:rgba(21,128,61,.3);border-color:rgba(120,220,150,.4)">🧾 Payslip</span>'  : '',
+    d.cibil_pdf_parsed      ? '<span class="dh-cibil-badge">📄 CIBIL PDF</span>'                                                                          : '',
+    d.bank_statement_parsed ? '<span class="dh-cibil-badge" style="background:rgba(21,101,192,.3);border-color:rgba(180,210,255,.4)">🏦 Bank Stmt</span>' : '',
+    (d.fraud_flags && d.fraud_flags.length > 0) ? `<span class="dh-cibil-badge" style="background:rgba(245,158,11,.3);border-color:rgba(245,200,50,.4)">⚠️ ${d.fraud_flags.length} Fraud Flag${d.fraud_flags.length>1?'s':''}</span>` : '',
+  ].filter(Boolean).join(' ');
+
+  document.getElementById('dhBadge').innerHTML = icons[dec] + '  ' + dec + (docBadges ? ' ' + docBadges : '');
   document.getElementById('dhAppId').textContent = d.application_id || '';
   document.getElementById('dhName').textContent = (d.applicant_name || '') + ' — ' + (d.loan_type || '');
+
+  // Source info row
+  const empSrcIcon = { PAYSLIP:'🧾', BANK:'🏦', CIBIL:'📄', MANUAL:'✏️' }[d.employment_source] || '✏️';
+  const incSrcIcon = { PAYSLIP:'🧾', BANK:'🏦', ITR:'📋', MANUAL:'✏️' }[d.income_source] || '✏️';
+  const confScore  = d.confidence_score || 0;
+  const confColor  = confScore >= 80 ? '#1a7f5a' : confScore >= 60 ? '#c17f24' : '#c0392b';
 
   const metrics = [
     { val: fmt(d.approved_amount || 0), lbl: 'Approved Amount' },
@@ -1499,10 +1984,20 @@ function renderResult(d) {
     { val: fmt(d.emi_estimate || 0) + '/mo', lbl: 'Est. EMI' },
     { val: (d.foir || 0) + '%', lbl: 'FOIR' },
     { val: d.risk_score || '—', lbl: 'Risk Score' },
+    { val: confScore + '%', lbl: 'Confidence' },
   ];
   document.getElementById('dhMetrics').innerHTML = metrics.map(m =>
     `<div class="dh-metric"><div class="val">${m.val}</div><div class="lbl">${m.lbl}</div></div>`
-  ).join('');
+  ).join('') + `
+  <div style="flex-basis:100%;margin-top:10px;font-size:11px;color:rgba(255,255,255,.65);">
+    ${empSrcIcon} Employment: <strong style="color:white">${d.employment_source||'Manual'}</strong>
+    &nbsp;|&nbsp; ${incSrcIcon} Income: <strong style="color:white">${d.income_source||'Manual'}</strong>
+    &nbsp;|&nbsp; Confidence:
+    <span style="color:${confColor};background:rgba(255,255,255,.15);padding:1px 7px;border-radius:4px;font-weight:700">${confScore}%</span>
+    <div class="confidence-bar" style="margin-top:4px;width:160px;">
+      <div class="confidence-bar-fill" style="width:${confScore}%;background:${confColor};"></div>
+    </div>
+  </div>`;
 
   const pvCard = document.getElementById('policyCard');
   if (d.policy_violations && d.policy_violations.length > 0) {
@@ -1532,6 +2027,13 @@ function renderResult(d) {
     cc.style.display = '';
     document.getElementById('counterText').textContent = d.counter_offer;
   } else { cc.style.display = 'none'; }
+
+  // Re-decision hints (shown only for REJECTED/CONDITIONAL)
+  const rc = document.getElementById('redecisionCard');
+  if (d.redecision_hints && dec !== 'APPROVED') {
+    rc.style.display = '';
+    document.getElementById('redecisionText').textContent = d.redecision_hints;
+  } else { rc.style.display = 'none'; }
 
   document.getElementById('strengthsList').innerHTML =
     (d.strengths||[]).map(s=>`<li><span class="dot"></span>${s}</li>`).join('');
