@@ -600,7 +600,7 @@ async def parse_cibil(
     b64 = base64.standard_b64encode(content).decode("utf-8")
 
     extraction_prompt = """You are an expert CIBIL/credit bureau data extraction system for Indian lenders.
-Carefully read this credit report and extract every available data point including personal details.
+Carefully read this credit report and extract every available data point including personal details and employment information.
 
 Return ONLY valid JSON — no explanation, no markdown, no preamble:
 {
@@ -612,6 +612,10 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
   "email": <email address if visible, or "">,
   "address": <current or permanent address from report, condensed to one line, or "">,
   "gender": <"Male" or "Female" or "">,
+
+  "employer_name": <current employer name as listed under Employment section of the report, or "">,
+  "monthly_income": <monthly income in rupees if shown under Employment/Income section, else 0>,
+  "employment_type": <infer from employer details — one of: "Salaried — Private Sector" | "Salaried — Government / PSU" | "Self-Employed Professional" | "Business Owner / Proprietor" | "Freelancer / Consultant" | "" — use "Salaried — Government / PSU" if employer is a govt body/PSU/bank, "Salaried — Private Sector" for private companies>,
 
   "cibil_score": <integer 300-900, or null if not found>,
   "credit_vintage_yrs": <float, age of oldest credit account in years, e.g. 6.5, default 0>,

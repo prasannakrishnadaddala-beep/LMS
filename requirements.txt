@@ -7,3 +7,4 @@ pg8000==1.31.2
 slowapi==0.1.9
 itsdangerous==2.2.0
 pypdf==4.3.1
+cryptography>=3.1
