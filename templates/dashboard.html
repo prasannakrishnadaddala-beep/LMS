@@ -64,7 +64,19 @@ nav{
 .stat-card.rate .stat-num{color:var(--gold);}
 .stat-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
 
-/* ── Search + filter ── */
+/* ── Charts ── */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:24px;}
+@media(max-width:900px){.charts-grid{grid-template-columns:1fr 1fr;}}
+@media(max-width:580px){.charts-grid{grid-template-columns:1fr;}}
+.chart-card{background:white;border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;}
+.chart-card.wide{grid-column:span 2;}
+@media(max-width:900px){.chart-card.wide{grid-column:span 1;}}
+.chart-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--primary);margin-bottom:14px;display:flex;align-items:center;gap:7px;}
+.chart-title .ct-icon{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;}
+.chart-title .ct-icon.green{background:rgba(26,127,90,.1);color:var(--success);}
+.chart-title .ct-icon.gold{background:rgba(200,151,46,.1);color:var(--gold);}
+.chart-title .ct-icon.blue{background:rgba(21,101,192,.1);color:#1565c0;}
+canvas{display:block;}
 .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
 .search-box{
   flex:1;max-width:320px;
@@ -177,6 +189,25 @@ tbody td{padding:11px 14px;font-size:13px;vertical-align:middle;}
     </div>
   </div>
 
+  <!-- Charts row -->
+  <div class="charts-grid" id="chartsSection" style="display:none">
+    <!-- Donut: Decision breakdown -->
+    <div class="chart-card">
+      <div class="chart-title"><span class="ct-icon green">🎯</span>Decision Split</div>
+      <canvas id="chartDecision" height="180"></canvas>
+    </div>
+    <!-- Bar: Loan type volume -->
+    <div class="chart-card wide">
+      <div class="chart-title"><span class="ct-icon gold">📊</span>Applications by Loan Type</div>
+      <canvas id="chartLoanTypes" height="180"></canvas>
+    </div>
+    <!-- Line: 7-day trend -->
+    <div class="chart-card" style="grid-column:1/-1">
+      <div class="chart-title"><span class="ct-icon blue">📈</span>7-Day Application Trend</div>
+      <canvas id="chartTrend" height="110"></canvas>
+    </div>
+  </div>
+
   <!-- Toolbar -->
   <div class="toolbar">
     <input class="search-box" type="text" id="searchInput" placeholder="Search by name, ID, or loan type…" oninput="filterTable()"/>
@@ -256,7 +287,134 @@ tbody td{padding:11px 14px;font-size:13px;vertical-align:middle;}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
+// ── Chart data from backend ────────────────────────────────────────────────────
+const CD = {{ chart_data_json | safe }};
+
+// Common chart defaults
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+Chart.defaults.font.size   = 11;
+Chart.defaults.color       = '#6b7c77';
+
+function initCharts() {
+  const decisions = CD.decisions || [];
+  const loanTypes = CD.loan_types || [];
+  const monthly   = CD.monthly   || [];
+
+  const hasData = decisions.some(d => d.value > 0) || loanTypes.length > 0 || monthly.length > 0;
+  if (!hasData) return;
+
+  document.getElementById('chartsSection').style.display = '';
+
+  // ── 1. Decision Donut ───────────────────────────────────────────────────────
+  if (decisions.length > 0) {
+    new Chart(document.getElementById('chartDecision'), {
+      type: 'doughnut',
+      data: {
+        labels: decisions.map(d => d.label),
+        datasets: [{
+          data: decisions.map(d => d.value),
+          backgroundColor: decisions.map(d => d.color),
+          borderWidth: 2,
+          borderColor: '#ffffff',
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        cutout: '68%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { padding: 14, boxWidth: 10, boxHeight: 10, borderRadius: 3, usePointStyle: true }
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.label}: ${ctx.raw} (${Math.round(ctx.raw / decisions.reduce((a,d)=>a+d.value,0) * 100)}%)`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // ── 2. Loan Type Bar ────────────────────────────────────────────────────────
+  if (loanTypes.length > 0) {
+    const palette = ['#0e4f35','#1a7f5a','#c8972e','#e8b84b','#c17f24','#c0392b','#1565c0','#7c3aed','#0891b2'];
+    new Chart(document.getElementById('chartLoanTypes'), {
+      type: 'bar',
+      data: {
+        labels: loanTypes.map(l => l.label.replace(' Loan','').replace('Microfinance / JLG','MFI/JLG')),
+        datasets: [{
+          data: loanTypes.map(l => l.value),
+          backgroundColor: loanTypes.map((_,i) => palette[i % palette.length] + 'cc'),
+          borderColor:      loanTypes.map((_,i) => palette[i % palette.length]),
+          borderWidth: 1.5,
+          borderRadius: 5,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        indexAxis: loanTypes.length > 5 ? 'y' : 'x',
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: '#f0ede6' }, ticks: { maxRotation: 30 } },
+          y: { grid: { color: '#f0ede6' }, ticks: { precision: 0 } }
+        }
+      }
+    });
+  }
+
+  // ── 3. 7-day Trend Line ─────────────────────────────────────────────────────
+  if (monthly.length > 0) {
+    const labels = monthly.map(m => {
+      const d = new Date(m.date);
+      return d.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+    });
+    new Chart(document.getElementById('chartTrend'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Total Applications',
+            data: monthly.map(m => m.total),
+            borderColor: '#0e4f35',
+            backgroundColor: 'rgba(14,79,53,0.08)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#0e4f35',
+            borderWidth: 2,
+          },
+          {
+            label: 'Approved',
+            data: monthly.map(m => m.approved),
+            borderColor: '#1a7f5a',
+            backgroundColor: 'rgba(26,127,90,0.05)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#1a7f5a',
+            borderWidth: 2,
+            borderDash: [4, 3],
+          }
+        ]
+      },
+      options: {
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 10, usePointStyle: true, padding: 16 } }
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { grid: { color: '#f0ede6' }, ticks: { precision: 0 }, beginAtZero: true }
+        }
+      }
+    });
+  }
+}
+
+// ── Table filter ────────────────────────────────────────────────────────────────
 function filterTable() {
   const search   = document.getElementById('searchInput').value.toLowerCase();
   const decision = document.getElementById('decisionFilter').value;
@@ -277,12 +435,12 @@ function filterTable() {
   badge.textContent = visible + ' of ' + rows.length + ' applications';
 }
 
-// Init count on load
 window.addEventListener('DOMContentLoaded', () => {
   const rows = document.querySelectorAll('#tableBody tr');
   if (rows.length > 0) {
     document.getElementById('countBadge').textContent = rows.length + ' applications';
   }
+  initCharts();
 });
 </script>
 </body>

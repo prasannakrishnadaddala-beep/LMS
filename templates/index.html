@@ -129,7 +129,48 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 
 .cibil-error{display:none;background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:12px;color:#991b1b;}
 
-/* SUBMIT BTN */
+/* ── BANK STATEMENT UPLOAD SECTION ─────────────────────────────────────────── */
+.bs-upload-area{
+  border:2px dashed rgba(21,101,192,.3);border-radius:10px;
+  padding:20px;text-align:center;cursor:pointer;
+  transition:border-color .2s,background .2s;background:#fafcff;
+  position:relative;
+}
+.bs-upload-area:hover,.bs-upload-area.drag-over{
+  border-color:#1565c0;background:#eff6ff;
+}
+.bs-upload-area input[type=file]{
+  position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;
+}
+.bs-upload-icon{font-size:32px;margin-bottom:8px;}
+.bs-upload-title{font-size:13px;font-weight:600;color:#1e40af;margin-bottom:3px;}
+.bs-upload-sub{font-size:11px;color:var(--muted);}
+
+.bs-parsing{display:none;text-align:center;padding:16px;}
+.bs-parsing .bs-spinner{width:28px;height:28px;border:3px solid #dbeafe;border-top-color:#1565c0;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px;}
+.bs-parsing p{font-size:12px;color:#1565c0;font-weight:500;}
+
+.bs-result{display:none;background:#eff6ff;border:1px solid rgba(21,101,192,.2);border-radius:10px;padding:14px;}
+.bs-result-badge{display:inline-flex;align-items:center;gap:5px;background:#1565c0;color:white;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:0.3px;}
+.bs-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+.bs-metric{background:white;border-radius:7px;padding:8px 10px;text-align:center;border:1px solid rgba(21,101,192,.12);}
+.bs-metric .bm-val{font-size:14px;font-weight:700;color:#1e40af;font-family:'DM Serif Display',serif;}
+.bs-metric .bm-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-top:2px;}
+.bs-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.bs-chip{font-size:11px;padding:3px 9px;border-radius:5px;font-weight:600;}
+.bs-chip.ok{background:#d1fae5;color:#065f46;}
+.bs-chip.warn{background:#fef3c7;color:#92400e;}
+.bs-chip.bad{background:#fee2e2;color:#991b1b;}
+.bs-notes{font-size:11px;color:#1e40af;margin-top:8px;font-style:italic;}
+.bs-clear{float:right;font-size:11px;color:#1565c0;cursor:pointer;text-decoration:underline;border:none;background:none;font-family:'DM Sans',sans-serif;}
+.bs-error{display:none;background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:12px;color:#991b1b;}
+
+/* Fraud alert box */
+.fraud-alert{display:none;background:#fff8f0;border:1.5px solid #f59e0b;border-radius:10px;padding:14px 16px;margin-top:14px;}
+.fraud-alert-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#92400e;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.fraud-alert ul{list-style:none;display:flex;flex-direction:column;gap:5px;}
+.fraud-alert li{font-size:12px;color:#78350f;padding-left:16px;position:relative;line-height:1.5;}
+.fraud-alert li::before{content:'⚠';position:absolute;left:0;font-size:11px;}
 .submit-btn{
   width:100%;padding:15px;
   background:var(--primary);color:white;border:none;
@@ -407,7 +448,79 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
   </div>
 </div>
 
-<!-- S3: Bureau Profile (now auto-fillable) -->
+<!-- S3b: Bank Statement Upload -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon blue">🏦</div>
+    <span class="section-title">Bank Statement Upload</span>
+    <span class="section-subtitle">AI extracts AMB, bounces, EMIs, salary</span>
+  </div>
+  <div class="section-body">
+    <!-- Upload area -->
+    <div id="bsUploadArea" class="bs-upload-area" ondragover="bsDrag(event,true)" ondragleave="bsDrag(event,false)" ondrop="bsDrop(event)">
+      <input type="file" id="bsFileInput" accept=".pdf" onchange="uploadBankStmt(this.files[0])"/>
+      <div class="bs-upload-icon">📄</div>
+      <div class="bs-upload-title">Drop Bank Statement PDF here or click to upload</div>
+      <div class="bs-upload-sub">6–12 month statement · Max 20 MB · All major banks supported</div>
+    </div>
+
+    <!-- Spinner -->
+    <div id="bsParsing" class="bs-parsing">
+      <div class="bs-spinner"></div>
+      <p>Analysing bank statement with AI…</p>
+    </div>
+
+    <!-- Result -->
+    <div id="bsResult" class="bs-result">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="bs-result-badge">✅ Bank Statement Auto-Filled</div>
+        <button type="button" class="bs-clear" onclick="clearBankStmt()">✕ Clear & re-upload</button>
+      </div>
+      <div class="bs-metrics" id="bsMetrics"></div>
+      <div class="bs-chips" id="bsChips"></div>
+      <div class="bs-notes" id="bsNotes"></div>
+    </div>
+
+    <!-- Error -->
+    <div id="bsError" class="bs-error">
+      ⚠️ <span id="bsErrorMsg"></span>
+      <button type="button" style="margin-left:8px;font-size:11px;color:#991b1b;background:none;border:none;cursor:pointer;text-decoration:underline;" onclick="clearBankStmt()">Try again</button>
+    </div>
+
+    <!-- Fraud alert (shown if flags detected) -->
+    <div id="fraudAlert" class="fraud-alert">
+      <div class="fraud-alert-title">🚨 Pre-Screen Fraud Signals Detected</div>
+      <ul id="fraudAlertList"></ul>
+    </div>
+
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);">
+      📌 Statement data overrides manually entered AMB, bounce count &amp; EMI obligations.
+    </div>
+
+    <!-- Hidden inputs for bank statement data -->
+    <input type="hidden" name="bank_statement_parsed"     id="bsParsedInput"    value="no"/>
+    <input type="hidden" name="bs_salary_amount"          id="bsSalaryInput"    value="0"/>
+    <input type="hidden" name="bs_avg_monthly_balance"    id="bsAmbInput"       value="0"/>
+    <input type="hidden" name="bs_bounce_count"           id="bsBounceInput"    value="0"/>
+    <input type="hidden" name="bs_emi_debits_detected"    id="bsEmiInput"       value="0"/>
+    <input type="hidden" name="bs_large_unusual_credits"  id="bsLargeCredInput" value="0"/>
+    <input type="hidden" name="bs_credit_debit_ratio"     id="bsCdRatioInput"   value="0"/>
+    <input type="hidden" name="bs_statement_months"       id="bsMonthsInput"    value="0"/>
+    <input type="hidden" name="bs_upi_credits_monthly_avg" id="bsUpiInput"      value="0"/>
+    <input type="hidden" name="bs_emi_accounts_count"     id="bsEmiCountInput"  value="0"/>
+  </div>
+</div>
+
+<!-- S3c: Fraud Profile (visible only when flags exist before submission) -->
+<div id="preFraudSection" style="display:none;margin-bottom:16px;">
+  <div style="background:#fff8f0;border:1.5px solid #f59e0b;border-radius:12px;padding:16px 20px;">
+    <div style="font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">⚠️ Document Cross-Check — Fraud Signals</div>
+    <ul id="preFraudList" style="list-style:none;display:flex;flex-direction:column;gap:6px;"></ul>
+    <p style="font-size:11px;color:#78350f;margin-top:10px;">These discrepancies will be reviewed by the AI credit engine. You may still proceed.</p>
+  </div>
+</div>
+
+<!-- S4: Bureau Profile -->
 <div class="section">
   <div class="section-head">
     <div class="section-icon orange">📊</div>
@@ -873,7 +986,188 @@ function clearCibil() {
   document.getElementById('emiAutoTag').innerHTML = '';
 }
 
-// ── FORM SUBMIT ────────────────────────────────────────────────────────────────
+// ── BANK STATEMENT UPLOAD ─────────────────────────────────────────────────────
+function bsDrag(e, over) {
+  e.preventDefault();
+  document.getElementById('bsUploadArea').classList.toggle('drag-over', over);
+}
+function bsDrop(e) {
+  e.preventDefault();
+  document.getElementById('bsUploadArea').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadBankStmt(file);
+}
+
+async function uploadBankStmt(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showBsError('Only PDF files are supported.'); return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    showBsError('File too large. Maximum size is 20 MB.'); return;
+  }
+
+  document.getElementById('bsUploadArea').style.display = 'none';
+  document.getElementById('bsResult').style.display     = 'none';
+  document.getElementById('bsError').style.display      = 'none';
+  document.getElementById('fraudAlert').style.display   = 'none';
+  document.getElementById('bsParsing').style.display    = 'block';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const res  = await fetch('/parse-bank-statement', { method: 'POST', body: fd });
+    const json = await res.json();
+    document.getElementById('bsParsing').style.display = 'none';
+    if (!res.ok || json.error) { showBsError(json.error || 'Parsing failed.'); return; }
+    autofillBankStmt(json.data);
+  } catch(err) {
+    document.getElementById('bsParsing').style.display = 'none';
+    showBsError('Network error. Please try again.');
+  }
+}
+
+function autofillBankStmt(d) {
+  // Set hidden inputs
+  document.getElementById('bsParsedInput').value    = 'yes';
+  document.getElementById('bsSalaryInput').value    = d.salary_amount || 0;
+  document.getElementById('bsAmbInput').value       = d.avg_monthly_balance || 0;
+  document.getElementById('bsBounceInput').value    = d.outward_cheque_returns || d.bounce_count || 0;
+  document.getElementById('bsEmiInput').value       = d.emi_debits_detected || 0;
+  document.getElementById('bsLargeCredInput').value = d.large_unusual_credits || 0;
+  document.getElementById('bsCdRatioInput').value   = d.credit_debit_ratio || 0;
+  document.getElementById('bsMonthsInput').value    = d.statement_months || 0;
+  document.getElementById('bsUpiInput').value       = d.upi_credits_monthly_avg || 0;
+  document.getElementById('bsEmiCountInput').value  = d.emi_accounts_count || 0;
+
+  // Auto-fill visible form fields too
+  const amb = d.avg_monthly_balance;
+  if (amb > 0) {
+    const ambField = document.querySelector('[name=avg_monthly_balance]');
+    if (ambField) { ambField.value = Math.round(amb); ambField.classList.add('auto-filled'); }
+  }
+  const bounce = d.outward_cheque_returns || d.bounce_count || 0;
+  if (bounce > 0) {
+    const bounceField = document.querySelector('[name=bounce_count_6m]');
+    if (bounceField) { bounceField.value = bounce; bounceField.classList.add('auto-filled'); }
+  }
+  const emi = d.emi_debits_detected || 0;
+  if (emi > 0) {
+    const emiField = document.querySelector('[name=existing_emi_total]');
+    if (emiField && parseFloat(emiField.value || 0) < emi) {
+      emiField.value = Math.round(emi); emiField.classList.add('auto-filled');
+    }
+  }
+  if (d.salary_credit_regular === false) {
+    document.getElementById('scr_no').checked = true;
+  }
+
+  // Build metrics display
+  const fmt = n => '₹' + Number(n||0).toLocaleString('en-IN');
+  const metrics = [
+    { val: fmt(d.avg_monthly_balance), lbl: 'Avg Balance' },
+    { val: fmt(d.avg_monthly_credit),  lbl: 'Avg Monthly Credits' },
+    { val: fmt(d.emi_debits_detected), lbl: 'EMI Debits Detected' },
+    { val: (d.outward_cheque_returns || d.bounce_count || 0) + ' bounces', lbl: 'Cheque Returns' },
+    { val: (d.statement_months || '?') + ' months', lbl: 'Statement Period' },
+    { val: d.credit_debit_ratio ? d.credit_debit_ratio + 'x' : '—', lbl: 'Credit/Debit Ratio' },
+  ];
+  document.getElementById('bsMetrics').innerHTML = metrics.map(m =>
+    `<div class="bs-metric"><div class="bm-val">${m.val}</div><div class="bm-lbl">${m.lbl}</div></div>`
+  ).join('');
+
+  // Chips
+  const chips = [];
+  const declIncome = parseFloat(document.querySelector('[name=monthly_income]')?.value || 0);
+  const bsSalary   = d.salary_amount || 0;
+  if (bsSalary > 0 && declIncome > 0) {
+    if (Math.abs(bsSalary - declIncome) / declIncome < 0.2)
+      chips.push({ text: `Salary verified ₹${Math.round(bsSalary/1000)}K`, cls:'ok' });
+    else
+      chips.push({ text: `Salary mismatch: stmt ₹${Math.round(bsSalary/1000)}K vs declared ₹${Math.round(declIncome/1000)}K`, cls:'warn' });
+  }
+  if (d.salary_credit_regular === true)  chips.push({ text:'Regular salary credits', cls:'ok' });
+  if (d.salary_credit_regular === false) chips.push({ text:'Irregular salary credits', cls:'warn' });
+  const bnc = d.outward_cheque_returns || d.bounce_count || 0;
+  if (bnc === 0)  chips.push({ text:'0 cheque returns', cls:'ok' });
+  else if (bnc <= 2) chips.push({ text: bnc + ' cheque return(s)', cls:'warn' });
+  else chips.push({ text: bnc + ' cheque returns', cls:'bad' });
+  if (d.emi_accounts_count > 0) chips.push({ text: d.emi_accounts_count + ' EMI account(s) detected', cls:'warn' });
+  if (d.large_unusual_credits >= 3) chips.push({ text: d.large_unusual_credits + ' unusual large credits', cls:'warn' });
+  const cdr = d.credit_debit_ratio || 0;
+  if (cdr >= 1.3) chips.push({ text:'Healthy cash surplus', cls:'ok' });
+  else if (cdr >= 1.0) chips.push({ text:'Balanced cash flow', cls:'ok' });
+  else if (cdr > 0) chips.push({ text:'Cash flow stress detected', cls:'bad' });
+
+  document.getElementById('bsChips').innerHTML =
+    chips.map(c => `<span class="bs-chip ${c.cls}">${c.text}</span>`).join('');
+
+  if (d.extraction_notes)
+    document.getElementById('bsNotes').textContent = '📝 ' + d.extraction_notes;
+
+  document.getElementById('bsResult').style.display = 'block';
+
+  // Pre-screen fraud signals from bank statement vs declared
+  checkCrossDocFraud(d, declIncome);
+}
+
+function checkCrossDocFraud(d, declIncome) {
+  const flags = [];
+  const bsSalary = d.salary_amount || 0;
+  if (bsSalary > 0 && declIncome > 0 && bsSalary < declIncome * 0.65)
+    flags.push(`Salary mismatch: declared ₹${Math.round(declIncome).toLocaleString('en-IN')}/mo but bank shows ₹${Math.round(bsSalary).toLocaleString('en-IN')}/mo`);
+
+  const declAMB = parseFloat(document.querySelector('[name=avg_monthly_balance]')?.dataset?.original || 0);
+  if (declAMB > 0 && d.avg_monthly_balance > 0 && Math.abs(d.avg_monthly_balance - declAMB)/declAMB > 0.5)
+    flags.push(`AMB discrepancy: declared ₹${Math.round(declAMB).toLocaleString('en-IN')} but statement shows ₹${Math.round(d.avg_monthly_balance).toLocaleString('en-IN')}`);
+
+  const declEmi = parseFloat(document.querySelector('[name=existing_emi_total]')?.dataset?.original || 0);
+  if (d.emi_debits_detected > 0 && declEmi === 0 && d.emi_debits_detected > 5000)
+    flags.push(`Undisclosed EMIs: bank statement shows ₹${Math.round(d.emi_debits_detected).toLocaleString('en-IN')}/mo EMI debits but declared 0`);
+
+  if (d.large_unusual_credits >= 3)
+    flags.push(`${d.large_unusual_credits} large unusual credits in statement — possible window dressing before loan application`);
+
+  const bnc = d.outward_cheque_returns || 0;
+  const declBounce = parseInt(document.querySelector('[name=bounce_count_6m]')?.dataset?.original || 0);
+  if (bnc > 0 && declBounce === 0 && bnc > 2)
+    flags.push(`${bnc} cheque returns in statement but applicant declared 0 bounces`);
+
+  if (flags.length > 0) {
+    const alertEl = document.getElementById('fraudAlert');
+    alertEl.style.display = 'block';
+    alertEl.querySelector('ul').innerHTML = flags.map(f => `<li>${f}</li>`).join('');
+    const preSection = document.getElementById('preFraudSection');
+    preSection.style.display = 'block';
+    document.getElementById('preFraudList').innerHTML =
+      flags.map(f => `<li style="font-size:12px;color:#78350f;padding-left:16px;position:relative;line-height:1.5;"><span style="position:absolute;left:0;">⚠</span>${f}</li>`).join('');
+  }
+}
+
+function showBsError(msg) {
+  document.getElementById('bsUploadArea').style.display = '';
+  document.getElementById('bsError').style.display = 'block';
+  document.getElementById('bsErrorMsg').textContent = msg;
+}
+
+function clearBankStmt() {
+  document.getElementById('bsParsedInput').value = 'no';
+  ['bsSalaryInput','bsAmbInput','bsBounceInput','bsEmiInput','bsLargeCredInput','bsCdRatioInput','bsMonthsInput','bsUpiInput','bsEmiCountInput']
+    .forEach(id => document.getElementById(id).value = '0');
+  document.getElementById('bsUploadArea').style.display = '';
+  document.getElementById('bsResult').style.display  = 'none';
+  document.getElementById('bsError').style.display   = 'none';
+  document.getElementById('bsParsing').style.display = 'none';
+  document.getElementById('fraudAlert').style.display = 'none';
+  document.getElementById('preFraudSection').style.display = 'none';
+  document.getElementById('bsFileInput').value = '';
+  // Remove auto-fills from bank statement
+  document.querySelectorAll('.auto-filled').forEach(el => {
+    if (!el.id.startsWith('f_')) el.classList.remove('auto-filled');
+  });
+}
+
 document.getElementById('loanForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const btn    = document.getElementById('submitBtn');
@@ -911,7 +1205,9 @@ function renderResult(d) {
   const icons = { APPROVED:'✅', REJECTED:'❌', CONDITIONAL:'⚠️' };
   document.getElementById('dhBadge').innerHTML =
     icons[dec] + '  ' + dec +
-    (d.cibil_pdf_parsed ? ' <span class="dh-cibil-badge">📄 CIBIL PDF</span>' : '');
+    (d.cibil_pdf_parsed    ? ' <span class="dh-cibil-badge">📄 CIBIL PDF</span>'       : '') +
+    (d.bank_statement_parsed ? ' <span class="dh-cibil-badge" style="background:rgba(21,101,192,.3);border-color:rgba(180,210,255,.4)">🏦 Bank Stmt</span>' : '') +
+    (d.fraud_flags && d.fraud_flags.length > 0 ? ` <span class="dh-cibil-badge" style="background:rgba(245,158,11,.3);border-color:rgba(245,200,50,.4)">⚠️ ${d.fraud_flags.length} Fraud Flag${d.fraud_flags.length>1?'s':''}</span>` : '');
   document.getElementById('dhAppId').textContent = d.application_id || '';
   document.getElementById('dhName').textContent = (d.applicant_name || '') + ' — ' + (d.loan_type || '');
 
