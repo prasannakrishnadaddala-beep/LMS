@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NBFC AI — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:'DM Sans',sans-serif;
+    background:linear-gradient(140deg,#071f12 0%,#0e4f35 50%,#1a6b4a 100%);
+    min-height:100vh;
+    display:flex;align-items:center;justify-content:center;
+    padding:24px;
+  }
+  .wrap{display:flex;align-items:center;gap:72px;max-width:860px;width:100%;}
+
+  /* Brand side */
+  .brand{flex:1;color:white;}
+  .brand-mark{
+    display:inline-flex;align-items:center;gap:10px;
+    background:rgba(200,151,46,0.15);
+    border:1px solid rgba(200,151,46,0.35);
+    border-radius:12px;padding:10px 16px;
+    margin-bottom:28px;
+  }
+  .brand-mark span{font-size:22px;}
+  .brand-mark strong{font-size:12px;font-weight:600;color:#c8972e;letter-spacing:1px;text-transform:uppercase;}
+  .brand h1{font-family:'DM Serif Display',serif;font-size:38px;line-height:1.15;margin-bottom:14px;}
+  .brand p{font-size:14px;color:rgba(255,255,255,0.55);line-height:1.75;max-width:270px;}
+  .feats{margin-top:32px;display:flex;flex-direction:column;gap:11px;}
+  .feat{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(255,255,255,0.65);}
+  .feat-dot{width:5px;height:5px;background:#c8972e;border-radius:50%;flex-shrink:0;}
+
+  /* Card */
+  .card{
+    background:white;border-radius:20px;padding:40px 38px;
+    width:100%;max-width:370px;
+    box-shadow:0 28px 70px rgba(0,0,0,0.35);
+    flex-shrink:0;
+  }
+  .card-header{margin-bottom:28px;}
+  .card-header h2{font-family:'DM Serif Display',serif;font-size:26px;color:#0e4f35;margin-bottom:5px;}
+  .card-header p{font-size:13px;color:#6b7c77;}
+
+  .error-msg{
+    background:#fef2f2;border:1px solid #fca5a5;
+    color:#b91c1c;font-size:12px;
+    padding:10px 13px;border-radius:8px;margin-bottom:18px;
+    display:flex;align-items:center;gap:7px;
+  }
+  .form-group{margin-bottom:18px;}
+  label{display:block;font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase;}
+  input[type=text],input[type=password]{
+    width:100%;padding:11px 14px;
+    border:1.5px solid #ddd9cf;border-radius:9px;
+    font-size:14px;font-family:'DM Sans',sans-serif;
+    color:#1a1a1a;background:#fafaf8;
+    outline:none;transition:border-color .2s,box-shadow .2s;
+  }
+  input:focus{border-color:#0e4f35;box-shadow:0 0 0 3px rgba(14,79,53,.1);background:#fff;}
+  .btn{
+    width:100%;padding:13px;margin-top:4px;
+    background:#0e4f35;color:white;border:none;
+    border-radius:10px;font-size:14px;font-weight:600;
+    font-family:'DM Sans',sans-serif;cursor:pointer;
+    letter-spacing:0.3px;transition:background .2s,transform .1s;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .btn:hover{background:#0a3320;}
+  .btn:active{transform:scale(0.99);}
+
+  .version{
+    text-align:center;margin-top:20px;
+    font-size:11px;color:#9ca3af;letter-spacing:0.3px;
+  }
+  @media(max-width:660px){.brand{display:none;}.wrap{justify-content:center;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="brand-mark">
+      <span>🏦</span>
+      <strong>NBFC AI Platform</strong>
+    </div>
+    <h1>AI-powered<br>Loan Underwriting</h1>
+    <p>Fast, explainable credit decisions for modern Indian lenders. Built on RBI-aware lending rules.</p>
+    <div class="feats">
+      <div class="feat"><span class="feat-dot"></span>9 loan product categories</div>
+      <div class="feat"><span class="feat-dot"></span>FOIR, LTV &amp; CIBIL analysis</div>
+      <div class="feat"><span class="feat-dot"></span>Fraud detection &amp; regulatory flags</div>
+      <div class="feat"><span class="feat-dot"></span>Every decision tracked &amp; auditable</div>
+      <div class="feat"><span class="feat-dot"></span>Ready for MuleSoft LMS integration</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Sign in</h2>
+      <p>Access your lending dashboard</p>
+    </div>
+
+    {% if error %}
+    <div class="error-msg">⚠️ {{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/login">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="username" placeholder="Enter username" required autofocus/>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="Enter password" required/>
+      </div>
+      <button type="submit" class="btn">Sign In →</button>
+    </form>
+    <div class="version">NBFC AI Platform v2.0 · Powered by Claude AI</div>
+  </div>
+</div>
+</body>
+</html>

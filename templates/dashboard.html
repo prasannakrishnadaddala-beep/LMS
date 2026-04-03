@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NBFC AI — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#0e4f35;--primary-dark:#0a3320;
+  --gold:#c8972e;--gold-light:#e8b84b;
+  --bg:#eeeae2;--card:#ffffff;--text:#1a1a1a;
+  --muted:#6b7c77;--border:#d5d0c5;
+  --success:#1a7f5a;--danger:#c0392b;--warning:#c17f24;
+  --radius:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);}
+
+/* ── Nav (same as index) ── */
+nav{
+  background:var(--primary);padding:0 28px;height:58px;
+  display:flex;align-items:center;justify-content:space-between;
+  box-shadow:0 2px 12px rgba(0,0,0,.2);position:sticky;top:0;z-index:100;
+}
+.nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav-logo{width:34px;height:34px;background:rgba(200,151,46,.2);border:1px solid rgba(200,151,46,.4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.nav-title{color:white;font-size:15px;font-weight:600;}
+.nav-title span{color:#c8972e;font-family:'DM Serif Display',serif;}
+.nav-right{display:flex;align-items:center;gap:6px;}
+.nav-link{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,.75);text-decoration:none;transition:background .15s,color .15s;cursor:pointer;border:none;background:none;font-family:'DM Sans',sans-serif;}
+.nav-link:hover{background:rgba(255,255,255,.1);color:white;}
+.nav-link.active{background:rgba(200,151,46,.2);color:#e8b84b;}
+.nav-user{font-size:12px;color:rgba(255,255,255,.5);padding:0 10px;border-right:1px solid rgba(255,255,255,.15);margin-right:4px;}
+
+/* ── Page ── */
+.container{max-width:1120px;margin:28px auto;padding:0 24px;}
+.page-header{margin-bottom:22px;}
+.page-header h1{font-family:'DM Serif Display',serif;font-size:26px;color:var(--primary);}
+.page-header p{font-size:13px;color:var(--muted);margin-top:4px;}
+
+/* ── Stats ── */
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;}
+@media(max-width:700px){.stats-grid{grid-template-columns:1fr 1fr;}}
+.stat-card{
+  background:white;border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px 16px;text-align:center;position:relative;overflow:hidden;
+}
+.stat-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+}
+.stat-card.total::before{background:var(--primary);}
+.stat-card.approved::before{background:var(--success);}
+.stat-card.rejected::before{background:var(--danger);}
+.stat-card.conditional::before{background:var(--warning);}
+.stat-card.rate::before{background:var(--gold);}
+
+.stat-num{font-family:'DM Serif Display',serif;font-size:28px;font-weight:400;margin-bottom:4px;}
+.stat-card.total .stat-num{color:var(--primary);}
+.stat-card.approved .stat-num{color:var(--success);}
+.stat-card.rejected .stat-num{color:var(--danger);}
+.stat-card.conditional .stat-num{color:var(--warning);}
+.stat-card.rate .stat-num{color:var(--gold);}
+.stat-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+
+/* ── Search + filter ── */
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.search-box{
+  flex:1;max-width:320px;
+  padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:13px;font-family:'DM Sans',sans-serif;background:white;
+  outline:none;color:var(--text);transition:border-color .2s;
+}
+.search-box:focus{border-color:var(--primary);}
+.filter-sel{
+  padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:13px;font-family:'DM Sans',sans-serif;background:white;
+  outline:none;color:var(--text);cursor:pointer;transition:border-color .2s;
+}
+.filter-sel:focus{border-color:var(--primary);}
+.count-badge{margin-left:auto;font-size:12px;color:var(--muted);}
+
+/* ── Table ── */
+.table-wrap{background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+table{width:100%;border-collapse:collapse;}
+thead th{
+  padding:11px 14px;text-align:left;
+  font-size:10px;font-weight:600;text-transform:uppercase;
+  letter-spacing:0.5px;color:var(--muted);
+  background:#f8f7f3;border-bottom:1px solid var(--border);
+  white-space:nowrap;
+}
+tbody tr{border-bottom:1px solid #f0ede6;transition:background .12s;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:#fafaf8;}
+tbody td{padding:11px 14px;font-size:13px;vertical-align:middle;}
+
+/* Decision badge */
+.badge{display:inline-block;padding:3px 9px;border-radius:5px;font-size:11px;font-weight:600;letter-spacing:0.3px;}
+.badge.APPROVED{background:#d1fae5;color:var(--success);}
+.badge.REJECTED{background:#fee2e2;color:var(--danger);}
+.badge.CONDITIONAL{background:#fef3c7;color:var(--warning);}
+
+/* Risk badge */
+.risk{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;}
+.risk.LOW{background:#dcfce7;color:#166534;}
+.risk.MEDIUM{background:#fef9c3;color:#854d0e;}
+.risk.HIGH{background:#fee2e2;color:#991b1b;}
+
+/* Loan type chip */
+.loan-chip{font-size:11px;color:var(--primary);font-weight:500;}
+.amt{font-weight:600;color:var(--text);}
+.muted-text{color:var(--muted);font-size:12px;}
+
+/* No data */
+.no-data{text-align:center;padding:60px 20px;}
+.no-data-icon{font-size:48px;margin-bottom:14px;opacity:0.4;}
+.no-data h3{font-size:16px;color:var(--muted);margin-bottom:6px;}
+.no-data p{font-size:13px;color:var(--muted);}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  .hide-md{display:none!important;}
+}
+@media(max-width:620px){
+  .hide-sm{display:none!important;}
+  table{font-size:12px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav>
+  <a class="nav-brand" href="/">
+    <div class="nav-logo">🏦</div>
+    <span class="nav-title">NBFC <span>AI</span></span>
+  </a>
+  <div class="nav-right">
+    <span class="nav-user">{{ username }}</span>
+    <a class="nav-link" href="/">Analysis</a>
+    <a class="nav-link active" href="/dashboard">Dashboard</a>
+    <form method="post" action="/logout" style="display:inline">
+      <button class="nav-link" type="submit">Sign Out</button>
+    </form>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>Applications Dashboard</h1>
+    <p>All loan decisions tracked and auditable — most recent 100 applications</p>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card total">
+      <div class="stat-num">{{ stats.total }}</div>
+      <div class="stat-lbl">Total Applications</div>
+    </div>
+    <div class="stat-card approved">
+      <div class="stat-num">{{ stats.approved }}</div>
+      <div class="stat-lbl">Approved</div>
+    </div>
+    <div class="stat-card rejected">
+      <div class="stat-num">{{ stats.rejected }}</div>
+      <div class="stat-lbl">Rejected</div>
+    </div>
+    <div class="stat-card conditional">
+      <div class="stat-num">{{ stats.conditional }}</div>
+      <div class="stat-lbl">Conditional</div>
+    </div>
+    <div class="stat-card rate">
+      <div class="stat-num">{{ stats.approval_rate }}%</div>
+      <div class="stat-lbl">Approval Rate</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <input class="search-box" type="text" id="searchInput" placeholder="Search by name, ID, or loan type…" oninput="filterTable()"/>
+    <select class="filter-sel" id="decisionFilter" onchange="filterTable()">
+      <option value="">All Decisions</option>
+      <option value="APPROVED">Approved</option>
+      <option value="REJECTED">Rejected</option>
+      <option value="CONDITIONAL">Conditional</option>
+    </select>
+    <select class="filter-sel" id="riskFilter" onchange="filterTable()">
+      <option value="">All Risk Levels</option>
+      <option value="LOW">Low Risk</option>
+      <option value="MEDIUM">Medium Risk</option>
+      <option value="HIGH">High Risk</option>
+    </select>
+    <span class="count-badge" id="countBadge"></span>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    {% if applications %}
+    <table id="appTable">
+      <thead>
+        <tr>
+          <th>Reference</th>
+          <th>Applicant</th>
+          <th class="hide-sm">Loan Type</th>
+          <th>Amount</th>
+          <th>Decision</th>
+          <th class="hide-md">Risk</th>
+          <th class="hide-md">FOIR</th>
+          <th class="hide-md">CIBIL</th>
+          <th class="hide-sm">Rate</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        {% for app in applications %}
+        <tr
+          data-decision="{{ app.decision }}"
+          data-risk="{{ app.risk_level }}"
+          data-search="{{ app.application_id }} {{ app.applicant_name }} {{ app.loan_type }}"
+        >
+          <td><span style="font-family:'DM Serif Display',serif;font-size:12px;color:var(--primary);font-weight:400;letter-spacing:0.3px;">{{ app.application_id }}</span></td>
+          <td>
+            <div class="amt">{{ app.applicant_name }}</div>
+            <div class="muted-text">{{ app.employment_type | truncate(22, true, '…') }}</div>
+          </td>
+          <td class="hide-sm"><span class="loan-chip">{{ app.loan_type }}</span></td>
+          <td>
+            <div class="amt">₹{{ '{:,.0f}'.format(app.loan_amount) }}</div>
+            {% if app.approved_amount > 0 and app.decision == 'APPROVED' %}
+            <div class="muted-text">Approved: ₹{{ '{:,.0f}'.format(app.approved_amount) }}</div>
+            {% endif %}
+          </td>
+          <td><span class="badge {{ app.decision }}">{{ app.decision }}</span></td>
+          <td class="hide-md">
+            {% if app.risk_level %}
+            <span class="risk {{ app.risk_level }}">{{ app.risk_level }}</span>
+            {% endif %}
+          </td>
+          <td class="hide-md"><span class="{{ 'danger-text' if app.foir > 50 else '' }}" style="{{ 'color:var(--danger)' if app.foir > 50 else '' }}">{{ app.foir }}%</span></td>
+          <td class="hide-md">{{ app.cibil_score }}</td>
+          <td class="hide-sm">{% if app.interest_rate %}{{ app.interest_rate }}%{% else %}—{% endif %}</td>
+          <td><span class="muted-text">{{ app.created_at }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="no-data">
+      <div class="no-data-icon">📋</div>
+      <h3>No applications yet</h3>
+      <p>Loan decisions will appear here once you start analyzing applications.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function filterTable() {
+  const search   = document.getElementById('searchInput').value.toLowerCase();
+  const decision = document.getElementById('decisionFilter').value;
+  const risk     = document.getElementById('riskFilter').value;
+  const rows     = document.querySelectorAll('#tableBody tr');
+  let visible    = 0;
+
+  rows.forEach(row => {
+    const matchSearch   = !search   || row.dataset.search.toLowerCase().includes(search);
+    const matchDecision = !decision || row.dataset.decision === decision;
+    const matchRisk     = !risk     || row.dataset.risk === risk;
+    const show = matchSearch && matchDecision && matchRisk;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  const badge = document.getElementById('countBadge');
+  badge.textContent = visible + ' of ' + rows.length + ' applications';
+}
+
+// Init count on load
+window.addEventListener('DOMContentLoaded', () => {
+  const rows = document.querySelectorAll('#tableBody tr');
+  if (rows.length > 0) {
+    document.getElementById('countBadge').textContent = rows.length + ' applications';
+  }
+});
+</script>
+</body>
+</html>
