@@ -710,6 +710,22 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
   </div>
 </div>
 
+
+<!-- ── PARSE ALL DOCUMENTS (Smart Batch — 1 AI call) ──────────────────────── -->
+<div id="parseAllBanner" style="display:none;margin-bottom:16px;">
+  <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-radius:14px;padding:18px 22px;display:flex;align-items:center;gap:16px;box-shadow:0 4px 20px rgba(0,0,0,0.15);">
+    <div style="font-size:28px;flex-shrink:0;">⚡</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:3px;">Parse All Documents at Once</div>
+      <div style="font-size:11px;color:#94a3b8;" id="parseAllSubtitle">Save credits — send all uploaded docs in a single AI call instead of 3 separate ones.</div>
+    </div>
+    <button type="button" id="parseAllBtn" onclick="parseAllDocuments()"
+      style="background:#3b82f6;color:#fff;border:none;border-radius:9px;padding:10px 20px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background 0.2s;">
+      🚀 Parse All
+    </button>
+  </div>
+</div>
+
 <!-- S3c: Fraud Profile (visible only when flags exist before submission) -->
 <div id="preFraudSection" style="display:none;margin-bottom:16px;">
   <div style="background:#fff8f0;border:1.5px solid #f59e0b;border-radius:12px;padding:16px 20px;">
@@ -1034,6 +1050,7 @@ function psFileSelected(file) {
   if (!file.name.toLowerCase().endsWith('.pdf')) { showPsError('Only PDF files are supported.'); return; }
   if (file.size > 15 * 1024 * 1024) { showPsError('File too large. Maximum size is 15 MB.'); return; }
   _psPendingFile = file;
+  _registerPending('payslip', file, '');   // register for batch parse
   document.getElementById('psUploadArea').style.display = 'none';
   document.getElementById('psPendingName').textContent = file.name;
   document.getElementById('psPending').classList.add('visible');
@@ -1041,6 +1058,7 @@ function psFileSelected(file) {
 }
 
 async function uploadPayslip() {
+  _pendingPasswords.payslip = (document.getElementById('psPasswordInput')?.value || '');
   const file = _psPendingFile;
   if (!file) return;
   document.getElementById('psPending').classList.remove('visible');
@@ -1153,6 +1171,7 @@ function showPsError(msg) {
 
 function clearPayslip() {
   _psPendingFile = null;
+  _clearPending('payslip');
   document.getElementById('psParsedInput').value = 'no';
   ['psEmployerInput','psEmpTypeInput','psNetSalInput','psGrossSalInput','psEmpNameInput','psDesigInput']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = el.id.includes('Sal') ? '0' : ''; });
@@ -1255,6 +1274,7 @@ function cibilFileSelected(file) {
     showCibilError('File too large. Maximum size is 15 MB.'); return;
   }
   _cibilPendingFile = file;
+  _registerPending('cibil', file, '');   // register for batch parse
   document.getElementById('cibilUploadArea').style.display = 'none';
   document.getElementById('cibilPendingName').textContent = file.name;
   document.getElementById('cibilPending').classList.add('visible');
@@ -1262,6 +1282,8 @@ function cibilFileSelected(file) {
 }
 
 async function uploadCibil() {
+  // Keep password in sync for batch parse too
+  _pendingPasswords.cibil = (document.getElementById('cibilPasswordInput')?.value || '');
   const file = _cibilPendingFile;
   if (!file) return;
 
@@ -1625,6 +1647,7 @@ function showCibilError(msg) {
 
 function clearCibil() {
   _cibilPendingFile = null;
+  _clearPending('cibil');
   document.getElementById('cibilPdfParsedInput').value = 'no';
   document.getElementById('cibilUploadArea').style.display = '';
   document.getElementById('cibilPending').classList.remove('visible');
@@ -1671,6 +1694,7 @@ function bsFileSelected(file) {
     showBsError('File too large. Maximum size is 20 MB.'); return;
   }
   _bsPendingFile = file;
+  _registerPending('bank', file, '');   // register for batch parse
   document.getElementById('bsUploadArea').style.display = 'none';
   document.getElementById('bsPendingName').textContent = file.name;
   document.getElementById('bsPending').classList.add('visible');
@@ -1678,6 +1702,7 @@ function bsFileSelected(file) {
 }
 
 async function uploadBankStmt() {
+  _pendingPasswords.bank = (document.getElementById('bsPasswordInput')?.value || '');
   const file = _bsPendingFile;
   if (!file) return;
 
@@ -1836,6 +1861,102 @@ function autofillBankStmt(d) {
   checkCrossDocFraud(d, declIncome);
 }
 
+
+// ── PARSE ALL DOCUMENTS — 1 API call for up to 3 docs ────────────────────────
+// Tracks pending (uploaded but not yet parsed) files per doc type
+const _pendingFiles = { cibil: null, bank: null, payslip: null };
+const _pendingPasswords = { cibil: '', bank: '', payslip: '' };
+
+function _updateParseAllBanner() {
+  const pending   = Object.values(_pendingFiles).filter(Boolean).length;
+  const banner    = document.getElementById('parseAllBanner');
+  const subtitle  = document.getElementById('parseAllSubtitle');
+  if (!banner) return;
+
+  if (pending >= 2) {
+    banner.style.display = '';
+    const names = [];
+    if (_pendingFiles.cibil)   names.push('CIBIL');
+    if (_pendingFiles.bank)    names.push('Bank Statement');
+    if (_pendingFiles.payslip) names.push('Payslip');
+    subtitle.textContent = `${names.join(' + ')} ready — parse all in 1 API call instead of ${names.length}.`;
+  } else if (pending === 1) {
+    banner.style.display = '';
+    const name = _pendingFiles.cibil ? 'CIBIL' : _pendingFiles.bank ? 'Bank Statement' : 'Payslip';
+    subtitle.textContent = `${name} ready. Upload more docs to batch-parse and save API credits.`;
+    document.getElementById('parseAllBtn').textContent = `🔍 Parse ${name}`;
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function _registerPending(type, file, password) {
+  _pendingFiles[type]    = file;
+  _pendingPasswords[type] = password || '';
+  _updateParseAllBanner();
+}
+
+function _clearPending(type) {
+  _pendingFiles[type]    = null;
+  _pendingPasswords[type] = '';
+  _updateParseAllBanner();
+}
+
+async function parseAllDocuments() {
+  const btn = document.getElementById('parseAllBtn');
+  btn.disabled    = true;
+  btn.textContent = '⏳ Parsing…';
+
+  const fd = new FormData();
+  if (_pendingFiles.cibil)   { fd.append('cibil_file',   _pendingFiles.cibil);   fd.append('cibil_password',   _pendingPasswords.cibil   || ''); }
+  if (_pendingFiles.bank)    { fd.append('bank_file',    _pendingFiles.bank);    fd.append('bank_password',    _pendingPasswords.bank    || ''); }
+  if (_pendingFiles.payslip) { fd.append('payslip_file', _pendingFiles.payslip); fd.append('payslip_password', _pendingPasswords.payslip || ''); }
+
+  try {
+    const resp = await fetch('/parse-documents', { method: 'POST', body: fd });
+    const json = await resp.json();
+
+    if (!resp.ok || !json.ok) {
+      alert('Parse error: ' + (json.error || 'Unknown error'));
+      btn.disabled = false; btn.textContent = '🚀 Parse All';
+      return;
+    }
+
+    const d = json.data;
+
+    // Apply CIBIL results (reuse existing processCibilResult if available)
+    if (d.cibil && typeof processCibilResult === 'function') {
+      processCibilResult(d.cibil);
+      _clearPending('cibil');
+      document.getElementById('cibilParsing').style.display = 'none';
+    }
+
+    // Apply bank statement results
+    if (d.bank && typeof processBankStatement === 'function') {
+      processBankStatement(d.bank);
+      _clearPending('bank');
+      document.getElementById('bsParsing').style.display = 'none';
+    }
+
+    // Apply payslip results
+    if (d.payslip && typeof processPayslipResult === 'function') {
+      processPayslipResult(d.payslip);
+      _clearPending('payslip');
+      document.getElementById('psParsing').style.display = 'none';
+    }
+
+    _updateParseAllBanner();
+    btn.disabled    = false;
+    btn.textContent = '✅ Done';
+    setTimeout(() => { btn.textContent = '🚀 Parse All'; }, 2000);
+
+  } catch (err) {
+    alert('Network error: ' + err.message);
+    btn.disabled    = false;
+    btn.textContent = '🚀 Parse All';
+  }
+}
+
 function checkNameMismatch() {
   const cName = (window._cibilExtractedName || '').trim();
   const bName = (window._bsExtractedName  || '').trim();
@@ -1904,6 +2025,7 @@ function showBsError(msg) {
 
 function clearBankStmt() {
   _bsPendingFile = null;
+  _clearPending('bank');
   document.getElementById('bsParsedInput').value = 'no';
   ['bsSalaryInput','bsAmbInput','bsBounceInput','bsEmiInput','bsLargeCredInput','bsCdRatioInput','bsMonthsInput','bsUpiInput','bsEmiCountInput']
     .forEach(id => document.getElementById(id).value = '0');
