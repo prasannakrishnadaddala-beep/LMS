@@ -2,8 +2,15 @@ from fastapi import FastAPI, Request, Form, Response, Cookie, UploadFile, File, 
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import anthropic
-import os, json, pg8000.native, ssl, base64, hashlib, secrets, string, random, logging
+import os, json, pg8000.native, ssl, base64, hashlib, secrets, string, random, logging, io
 from urllib.parse import urlparse
+try:
+    import pypdf
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
+    logger_pre = logging.getLogger(__name__)
+    logger_pre.warning("pypdf not installed — password-protected PDFs will not be decryptable")
 from datetime import datetime, timezone
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -12,6 +19,42 @@ from slowapi.errors import RateLimitExceeded
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ── PDF decryption helper ──────────────────────────────────────────────────────
+def decrypt_pdf(content: bytes, password: str = "") -> bytes:
+    """
+    If the PDF is encrypted, decrypt it using pypdf and return clean bytes.
+    If not encrypted, return original bytes.
+    Raises ValueError with a user-friendly message on failure.
+    """
+    if not PYPDF_AVAILABLE:
+        return content  # pass as-is; Claude may still parse unencrypted PDFs
+
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(content))
+        if not reader.is_encrypted:
+            return content  # nothing to do
+
+        if not password:
+            raise ValueError("This PDF is password-protected. Please enter the PDF password above.")
+
+        result = reader.decrypt(password)
+        if result == pypdf.PasswordType.NOT_DECRYPTED:
+            raise ValueError("Incorrect PDF password. Please check and try again.")
+
+        # Re-write without encryption so Claude can read it
+        writer = pypdf.PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+        out = io.BytesIO()
+        writer.write(out)
+        logger.info("PDF decrypted successfully")
+        return out.getvalue()
+
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"PDF processing error: {e}")
 
 # ── Env vars ───────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -531,6 +574,7 @@ async def parse_cibil(
     request: Request,
     session: str  = Cookie(default=None),
     file: UploadFile = File(...),
+    pdf_password: str = Form(""),
 ):
     user = verify_session(session)
     if not user:
@@ -544,16 +588,31 @@ async def parse_cibil(
     content = await file.read()
     if len(content) > 15 * 1024 * 1024:  # 15 MB limit
         return JSONResponse({"error": "PDF too large. Maximum size is 15 MB."}, status_code=400)
-    if len(content) < 1000:
+    if len(content) < 500:
         return JSONResponse({"error": "PDF appears to be empty or corrupted."}, status_code=400)
+
+    # Decrypt if password-protected
+    try:
+        content = decrypt_pdf(content, pdf_password.strip())
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
 
     b64 = base64.standard_b64encode(content).decode("utf-8")
 
     extraction_prompt = """You are an expert CIBIL/credit bureau data extraction system for Indian lenders.
-Carefully read this credit report and extract every available data point.
+Carefully read this credit report and extract every available data point including personal details.
 
 Return ONLY valid JSON — no explanation, no markdown, no preamble:
 {
+  "full_name": <full applicant name exactly as printed on the report, or "">,
+  "date_of_birth": <DOB in DD/MM/YYYY or YYYY-MM-DD format, or "">,
+  "age": <integer age calculated from DOB if available, else null>,
+  "pan_number": <PAN number (masked or full) if visible, e.g. "ABCDE1234F" or "ABCDE****F", or "">,
+  "mobile": <mobile number if visible on report, or "">,
+  "email": <email address if visible, or "">,
+  "address": <current or permanent address from report, condensed to one line, or "">,
+  "gender": <"Male" or "Female" or "">,
+
   "cibil_score": <integer 300-900, or null if not found>,
   "credit_vintage_yrs": <float, age of oldest credit account in years, e.g. 6.5, default 0>,
   "enquiries_6m": <integer, hard enquiries in last 6 months, default 0>,
@@ -567,16 +626,14 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
   "total_credit_cards": <integer, number of active credit cards>,
   "credit_limit_total": <total credit card limit in rupees, default 0>,
   "overdue_amount": <total current overdue amount in rupees, default 0>,
-  "name_on_report": <full name as on report, or "">,
-  "pan_masked": <masked PAN if visible, or "">,
   "report_date": <report generation date as string, or "">,
-  "extraction_notes": <string, max 150 chars, any important observations e.g. "3 active personal loans", "guarantor accounts present">
+  "extraction_notes": <string, max 200 chars, important observations e.g. "3 active personal loans", "guarantor accounts present", "CRIF report">
 }"""
 
     try:
         message = client.messages.create(
             model="claude-sonnet-4-5",
-            max_tokens=1200,
+            max_tokens=1400,
             messages=[{
                 "role": "user",
                 "content": [
@@ -595,7 +652,7 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
         raw    = message.content[0].text.strip()
         raw    = raw.replace("```json", "").replace("```", "").strip()
         result = json.loads(raw)
-        logger.info(f"CIBIL parsed by {user['username']}: score={result.get('cibil_score')}")
+        logger.info(f"CIBIL parsed by {user['username']}: score={result.get('cibil_score')} name={result.get('full_name','')}")
         return JSONResponse(content={"ok": True, "data": result})
     except json.JSONDecodeError as e:
         logger.error(f"CIBIL JSON parse error: {e}")
@@ -611,6 +668,7 @@ async def parse_bank_statement(
     request: Request,
     session: str  = Cookie(default=None),
     file: UploadFile = File(...),
+    pdf_password: str = Form(""),
 ):
     user = verify_session(session)
     if not user:
@@ -626,19 +684,34 @@ async def parse_bank_statement(
     if len(content) < 500:
         return JSONResponse({"error": "PDF appears to be empty or corrupted."}, status_code=400)
 
+    # Decrypt if password-protected
+    try:
+        content = decrypt_pdf(content, pdf_password.strip())
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
+
     b64 = base64.standard_b64encode(content).decode("utf-8")
 
     extraction_prompt = """You are an expert Indian bank statement analysis system for NBFC credit underwriting.
-Analyze this bank statement carefully and extract all financial signals relevant to loan underwriting.
+Analyze this bank statement carefully and extract all financial signals and account holder details.
 
 Return ONLY valid JSON — no explanation, no markdown, no preamble:
 {
+  "account_holder": <full name of account holder exactly as printed, or "">,
+  "account_number": <account number, last 4 digits only if full not visible, or "">,
+  "bank_name": <bank name as appearing on statement, or "">,
+  "branch": <branch name/address, or "">,
+  "ifsc_code": <IFSC code if visible, or "">,
+  "account_type": <"Savings" or "Current" or "OD" or "">,
+  "statement_from": <start date of statement in DD/MM/YYYY, or "">,
+  "statement_to": <end date of statement in DD/MM/YYYY, or "">,
+
   "avg_monthly_balance": <average end-of-day balance over all months, in rupees, default 0>,
   "min_monthly_balance": <lowest monthly closing balance seen, in rupees, default 0>,
   "max_monthly_balance": <highest monthly closing balance seen, in rupees, default 0>,
   "avg_monthly_credit": <average total credits (inflows) per month in rupees, default 0>,
   "avg_monthly_debit": <average total debits (outflows) per month in rupees, default 0>,
-  "bounce_count": <total number of bounced/returned cheques or ECS/NACH returns in the statement period, default 0>,
+  "bounce_count": <total number of bounced/returned cheques or ECS/NACH returns, default 0>,
   "salary_credits_count": <number of months with regular salary credit detected, default 0>,
   "salary_amount": <detected monthly salary credit amount if consistent, else 0>,
   "salary_credit_regular": <true if salary credited on similar dates each month, else false>,
@@ -647,13 +720,10 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
   "cash_withdrawals_monthly_avg": <average monthly cash withdrawal amount, default 0>,
   "upi_credits_monthly_avg": <average monthly UPI/NEFT inflow from business/clients, default 0>,
   "statement_months": <number of months covered by this statement, default 0>,
-  "bank_name": <bank name as appearing on statement, or "">,
-  "account_holder": <account holder name, or "">,
-  "account_type": <"Savings" or "Current" or "OD" or "">,
   "closing_balance": <most recent closing balance in the statement, default 0>,
-  "inward_cheque_returns": <number of inward cheque/ECS returns — indicates bad debtors if current account, default 0>,
-  "outward_cheque_returns": <number of outward cheque/ECS/NACH returns — indicates payment defaults, default 0>,
-  "large_unusual_credits": <number of unusually large one-time credits that don't match salary pattern, default 0>,
+  "inward_cheque_returns": <number of inward cheque/ECS returns, default 0>,
+  "outward_cheque_returns": <number of outward cheque/ECS/NACH returns — payment defaults, default 0>,
+  "large_unusual_credits": <number of unusually large one-time credits not matching salary pattern, default 0>,
   "credit_debit_ratio": <round(avg_monthly_credit / avg_monthly_debit, 2) if debit > 0 else null>,
   "extraction_notes": <string max 200 chars — key observations like "GST credits visible", "2 loan EMIs detected", "irregular salary">
 }"""
@@ -680,7 +750,7 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
         raw    = message.content[0].text.strip()
         raw    = raw.replace("```json", "").replace("```", "").strip()
         result = json.loads(raw)
-        logger.info(f"Bank statement parsed by {user['username']}: AMB=₹{result.get('avg_monthly_balance')}")
+        logger.info(f"Bank statement parsed by {user['username']}: holder={result.get('account_holder','')} AMB=₹{result.get('avg_monthly_balance')}")
         return JSONResponse(content={"ok": True, "data": result})
     except json.JSONDecodeError as e:
         logger.error(f"Bank statement JSON parse error: {e}")
