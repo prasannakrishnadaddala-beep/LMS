@@ -25,10 +25,10 @@ def decrypt_pdf(content: bytes, password: str = "") -> bytes:
     """
     If the PDF is encrypted, decrypt it using pypdf and return clean bytes.
     If not encrypted, return original bytes.
-    Raises ValueError with a user-friendly message on failure.
+    Raises ValueError with a clear, user-friendly message on every failure path.
     """
     if not PYPDF_AVAILABLE:
-        return content  # pass as-is; Claude may still parse unencrypted PDFs
+        return content  # pass as-is; Claude may still handle unencrypted PDFs
 
     try:
         reader = pypdf.PdfReader(io.BytesIO(content))
@@ -36,11 +36,18 @@ def decrypt_pdf(content: bytes, password: str = "") -> bytes:
             return content  # nothing to do
 
         if not password:
-            raise ValueError("This PDF is password-protected. Please enter the PDF password above.")
+            raise ValueError(
+                "This PDF is password-protected. "
+                "Please enter the password (usually your Date of Birth as DDMMYYYY, "
+                "e.g. 01011990, or the last 4 digits of your account number)."
+            )
 
         result = reader.decrypt(password)
         if result == pypdf.PasswordType.NOT_DECRYPTED:
-            raise ValueError("Incorrect PDF password. Please check and try again.")
+            raise ValueError(
+                "Incorrect password. Common formats: DOB as DDMMYYYY (e.g. 15081995), "
+                "account number last 4 digits, or PAN number."
+            )
 
         # Re-write without encryption so Claude can read it
         writer = pypdf.PdfWriter()
@@ -48,13 +55,35 @@ def decrypt_pdf(content: bytes, password: str = "") -> bytes:
             writer.add_page(page)
         out = io.BytesIO()
         writer.write(out)
-        logger.info("PDF decrypted successfully")
+        logger.info("PDF decrypted successfully (%d pages)", len(reader.pages))
         return out.getvalue()
 
     except ValueError:
-        raise
+        raise  # already user-friendly, re-raise as-is
+
+    except ImportError:
+        # cryptography package missing — should not happen if requirements.txt is correct
+        raise ValueError(
+            "Server configuration error: the cryptography package is missing. "
+            "Please contact support or try uploading an unprotected version of the PDF."
+        )
+
     except Exception as e:
-        raise ValueError(f"PDF processing error: {e}")
+        err_str = str(e).lower()
+        # Catch the specific AES/cryptography missing error with a clear message
+        if "cryptography" in err_str or "aes" in err_str:
+            raise ValueError(
+                "This PDF uses AES encryption. The server is missing a required package. "
+                "Please contact support — or download an unprotected copy of your statement "
+                "from your bank's portal and upload that instead."
+            )
+        if "password" in err_str:
+            raise ValueError("Incorrect password. Please try again with your DOB (DDMMYYYY) or PAN.")
+        logger.error("decrypt_pdf unexpected error: %s", e)
+        raise ValueError(
+            "Could not open this PDF. It may be corrupted or use an unsupported format. "
+            "Try downloading a fresh copy from your bank portal."
+        )
 
 # ── Env vars ───────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
