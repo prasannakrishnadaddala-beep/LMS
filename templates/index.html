@@ -1836,8 +1836,56 @@ async function parseAllDocuments() {
     const json = await resp.json();
 
     if (!resp.ok || !json.ok) {
-      alert('Parse error: ' + (json.error || 'Unknown error'));
       btn.disabled = false; btn.textContent = '🚀 Parse All';
+      const errMsg = json.error || 'Unknown error';
+      const isPasswordErr = errMsg.toLowerCase().includes('password');
+
+      // Route error to the specific doc's inline UI — no alert() dialogs
+      if (isPasswordErr) {
+        const errLower = errMsg.toLowerCase();
+        // Backend prefixes error with doc label: "CIBIL report: ...", "Bank statement: ...", "Payslip: ..."
+        if (_pendingFiles.cibil && (errLower.startsWith('cibil') || errLower.includes('cibil report'))) {
+          document.getElementById('cibilParsing').style.display = 'none';
+          document.getElementById('cibilPending').classList.add('visible');
+          const pw = document.getElementById('cibilPasswordInput');
+          pw.style.borderColor = '#ef4444';
+          pw.placeholder = errMsg.replace(/^cibil report:\s*/i, '');
+        } else if (_pendingFiles.bank && (errLower.startsWith('bank') || errLower.includes('bank statement'))) {
+          document.getElementById('bsParsing').style.display = 'none';
+          document.getElementById('bsPending').classList.add('visible');
+          const pw = document.getElementById('bsPasswordInput');
+          pw.style.borderColor = '#ef4444';
+          pw.placeholder = errMsg.replace(/^bank statement:\s*/i, '');
+        } else if (_pendingFiles.payslip && (errLower.startsWith('payslip'))) {
+          document.getElementById('psParsing').style.display = 'none';
+          document.getElementById('psPending').classList.add('visible');
+          const pw = document.getElementById('psPasswordInput');
+          pw.style.borderColor = '#ef4444';
+          pw.placeholder = errMsg.replace(/^payslip:\s*/i, '');
+        } else {
+          // Can't identify which doc — show on whichever pending doc is first
+          if (_pendingFiles.cibil) {
+            document.getElementById('cibilParsing').style.display = 'none';
+            document.getElementById('cibilPending').classList.add('visible');
+            document.getElementById('cibilPasswordInput').style.borderColor = '#ef4444';
+            document.getElementById('cibilPasswordInput').placeholder = errMsg;
+          } else if (_pendingFiles.bank) {
+            document.getElementById('bsParsing').style.display = 'none';
+            document.getElementById('bsPending').classList.add('visible');
+            document.getElementById('bsPasswordInput').style.borderColor = '#ef4444';
+            document.getElementById('bsPasswordInput').placeholder = errMsg;
+          } else if (_pendingFiles.payslip) {
+            document.getElementById('psParsing').style.display = 'none';
+            document.getElementById('psPending').classList.add('visible');
+            document.getElementById('psPasswordInput').style.borderColor = '#ef4444';
+            document.getElementById('psPasswordInput').placeholder = errMsg;
+          }
+        }
+      } else {
+        // Non-password error — show inline in the parse-all banner area
+        const subtitle = document.getElementById('parseAllSubtitle');
+        if (subtitle) subtitle.textContent = '⚠️ ' + errMsg;
+      }
       return;
     }
 
@@ -1870,9 +1918,10 @@ async function parseAllDocuments() {
     setTimeout(() => { btn.textContent = '🚀 Parse All'; }, 2000);
 
   } catch (err) {
-    alert('Network error: ' + err.message);
     btn.disabled    = false;
     btn.textContent = '🚀 Parse All';
+    const subtitle = document.getElementById('parseAllSubtitle');
+    if (subtitle) subtitle.textContent = '⚠️ Network error — please try again.';
   }
 }
 
