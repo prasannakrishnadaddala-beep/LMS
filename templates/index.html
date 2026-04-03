@@ -173,6 +173,10 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 }
 .bs-pdf-pw-parse-btn:hover{background:#0d47a1;}
 .bs-pdf-pw-hint{font-size:10px;color:#1565c0;margin-top:2px;}
+.pw-chip{font-size:10px;padding:4px 10px;border-radius:20px;border:1.5px solid #3b82f6;background:#eff6ff;color:#1d4ed8;cursor:pointer;font-weight:600;transition:all .15s;}
+.pw-chip:hover{background:#3b82f6;color:#fff;}
+.pw-chip.purple{border-color:#7c3aed;background:#f5f3ff;color:#6d28d9;}
+.pw-chip.purple:hover{background:#7c3aed;color:#fff;}
 .bs-pdf-pw-cancel{font-size:11px;color:#1565c0;background:none;border:none;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif;padding:0;}
 
 /* Name mismatch warning */
@@ -528,7 +532,11 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
         <input type="text" id="psPasswordInput" placeholder="PDF password (leave blank if not protected)" autocomplete="off"/>
         <button type="button" class="ps-pdf-pw-parse-btn" onclick="uploadPayslip()">🔍 Parse Payslip</button>
       </div>
-      <div style="font-size:10px;color:#15803d;margin-top:2px;">🔒 Some payslips are password-protected (usually PAN or DOB)</div>
+      <div style="font-size:10px;color:#15803d;margin-top:2px;">
+        💡 Govt/PSU payslips → usually <strong>PAN number</strong>.
+        Private sector → usually <strong>DOB as DDMMYYYY</strong> or Employee ID.
+        Leave blank if not protected.
+      </div>
       <button type="button" class="ps-pdf-pw-cancel" onclick="clearPayslip()">✕ Cancel</button>
     </div>
 
@@ -593,7 +601,14 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
         <input type="text" id="cibilPasswordInput" placeholder="PDF password (leave blank if not protected)" autocomplete="off"/>
         <button type="button" class="pdf-pw-parse-btn" onclick="uploadCibil()">🔍 Parse Report</button>
       </div>
-      <div class="pdf-pw-hint">🔒 If the CIBIL PDF is password-protected, enter it above (usually DOB like 01011990 or PAN)</div>
+      <div class="pdf-pw-hint" style="color:#6d28d9;">
+        💡 CIBIL reports are usually protected with your <strong>DOB as DDMMYYYY</strong> (e.g. 01011990)
+        or your <strong>PAN number</strong> (e.g. ABCDE1234F).
+        <span style="display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;">
+          <button type="button" class="pw-chip purple" onclick="document.getElementById('cibilPasswordInput').focus()">📅 DOB format</button>
+          <button type="button" class="pw-chip purple" onclick="document.getElementById('cibilPasswordInput').focus()">🪪 PAN number</button>
+        </span>
+      </div>
       <button type="button" class="pdf-pw-cancel" onclick="clearCibil()">✕ Cancel, choose different file</button>
     </div>
 
@@ -650,11 +665,26 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
     <!-- Password prompt (shown after file selected) -->
     <div id="bsPending" class="bs-pdf-pending">
       <div class="bs-pdf-pending-name">📎 <span id="bsPendingName"></span></div>
+
+      <!-- Password quick-fill chips -->
+      <div style="margin-bottom:8px;">
+        <div style="font-size:10px;color:#1565c0;font-weight:600;margin-bottom:5px;">🔑 Common bank statement passwords — tap to fill:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;" id="bsPwChips">
+          <button type="button" class="pw-chip" onclick="bsFillPw('dob')">📅 DOB (DDMMYYYY)</button>
+          <button type="button" class="pw-chip" onclick="bsFillPw('acct4')">🔢 Account last 4 digits</button>
+          <button type="button" class="pw-chip" onclick="bsFillPw('pan')">🪪 PAN Number</button>
+          <button type="button" class="pw-chip" onclick="bsFillPw('none')">🔓 No password</button>
+        </div>
+      </div>
+
       <div class="bs-pdf-pw-row">
-        <input type="text" id="bsPasswordInput" placeholder="PDF password (leave blank if not protected)" autocomplete="off"/>
+        <input type="text" id="bsPasswordInput" placeholder="Enter password or tap a chip above" autocomplete="off"/>
         <button type="button" class="bs-pdf-pw-parse-btn" onclick="uploadBankStmt()">🔍 Parse Statement</button>
       </div>
-      <div class="bs-pdf-pw-hint">🔒 Many bank-generated statements are password-protected (usually DOB: DDMMYYYY or account number last 4 digits)</div>
+      <div id="bsPwHintText" class="bs-pdf-pw-hint" style="color:#1565c0;">
+        💡 SBI/HDFC/ICICI statements → usually your <strong>DOB as DDMMYYYY</strong> (e.g. 15081995).
+        Axis/Kotak → account last 4 digits. Govt salary slips → PAN number.
+      </div>
       <button type="button" class="bs-pdf-pw-cancel" onclick="clearBankStmt()">✕ Cancel, choose different file</button>
     </div>
 
@@ -1954,6 +1984,34 @@ async function parseAllDocuments() {
     alert('Network error: ' + err.message);
     btn.disabled    = false;
     btn.textContent = '🚀 Parse All';
+  }
+}
+
+
+// ── Password quick-fill helpers ───────────────────────────────────────────────
+function bsFillPw(type) {
+  const inp = document.getElementById('bsPasswordInput');
+  const hint = document.getElementById('bsPwHintText');
+  if (type === 'dob') {
+    inp.placeholder = 'Enter DOB as DDMMYYYY e.g. 15081995';
+    inp.value = '';
+    inp.focus();
+    if (hint) hint.innerHTML = '📅 <strong>DOB format:</strong> Day+Month+Year with no spaces — e.g. if born 15 Aug 1995 → type <strong>15081995</strong>';
+  } else if (type === 'acct4') {
+    inp.placeholder = 'Enter last 4 digits of account number';
+    inp.value = '';
+    inp.focus();
+    if (hint) hint.innerHTML = '🔢 <strong>Last 4 digits</strong> of your bank account number shown on the statement header.';
+  } else if (type === 'pan') {
+    inp.placeholder = 'Enter PAN e.g. ABCDE1234F';
+    inp.value = '';
+    inp.focus();
+    if (hint) hint.innerHTML = '🪪 Enter your <strong>PAN number</strong> exactly as printed (10 characters, all caps).';
+  } else if (type === 'none') {
+    inp.value = '';
+    inp.placeholder = 'No password — parsing now…';
+    if (hint) hint.innerHTML = '🔓 Attempting to parse without a password…';
+    uploadBankStmt();  // try immediately
   }
 }
 
