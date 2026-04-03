@@ -644,6 +644,157 @@ def create_user(
         logger.error(f"create_user: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+
+# ── Unified Document Parser — 1 AI call for all 3 doc types ──────────────────
+@app.post("/parse-documents")
+@limiter.limit("5/minute")
+async def parse_documents(
+    request:      Request,
+    session:      str        = Cookie(default=None),
+    cibil_file:   UploadFile = File(None),
+    cibil_password: str      = Form(""),
+    bank_file:    UploadFile = File(None),
+    bank_password: str       = Form(""),
+    payslip_file: UploadFile = File(None),
+    payslip_password: str    = Form(""),
+):
+    """
+    Parse up to 3 documents in a SINGLE Claude API call.
+    Replaces 3x /parse-cibil + /parse-bank-statement + /parse-payslip calls.
+    Uses Haiku (cheap + fast) for extraction.
+    Returns: { cibil: {...}, bank: {...}, payslip: {...} } — null if not provided.
+    """
+    user = verify_session(session)
+    if not user:
+        return JSONResponse({"error": "Session expired. Please log in again."}, status_code=401)
+
+    doc_blocks  = []   # Claude document blocks
+    doc_order   = []   # track which docs were sent and in what order
+
+    async def _load(upload: UploadFile, password: str, max_mb: int, label: str):
+        if not upload or not upload.filename:
+            return None
+        if not upload.filename.lower().endswith(".pdf"):
+            raise ValueError(f"{label}: only PDF files are supported.")
+        raw = await upload.read()
+        if len(raw) > max_mb * 1024 * 1024:
+            raise ValueError(f"{label}: file too large (max {max_mb} MB).")
+        if len(raw) < 200:
+            raise ValueError(f"{label}: file appears empty or corrupted.")
+        return decrypt_pdf(raw, password.strip())
+
+    try:
+        cibil_bytes   = await _load(cibil_file,   cibil_password,   15, "CIBIL report")
+        bank_bytes    = await _load(bank_file,     bank_password,    20, "Bank statement")
+        payslip_bytes = await _load(payslip_file,  payslip_password, 15, "Payslip")
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
+
+    if not any([cibil_bytes, bank_bytes, payslip_bytes]):
+        return JSONResponse({"error": "At least one document must be provided."}, status_code=400)
+
+    # Build document blocks for whichever files were supplied
+    if cibil_bytes:
+        doc_blocks.append({
+            "type": "document",
+            "source": {"type": "base64", "media_type": "application/pdf",
+                       "data": base64.standard_b64encode(cibil_bytes).decode()}
+        })
+        doc_order.append("CIBIL")
+
+    if bank_bytes:
+        doc_blocks.append({
+            "type": "document",
+            "source": {"type": "base64", "media_type": "application/pdf",
+                       "data": base64.standard_b64encode(bank_bytes).decode()}
+        })
+        doc_order.append("BANK")
+
+    if payslip_bytes:
+        doc_blocks.append({
+            "type": "document",
+            "source": {"type": "base64", "media_type": "application/pdf",
+                       "data": base64.standard_b64encode(payslip_bytes).decode()}
+        })
+        doc_order.append("PAYSLIP")
+
+    # Build prompt dynamically based on which docs are present
+    doc_instructions = []
+    if "CIBIL" in doc_order:
+        idx = doc_order.index("CIBIL") + 1
+        doc_instructions.append(f"""
+DOCUMENT {idx} IS THE CIBIL/BUREAU REPORT. Extract into "cibil" key:
+{{"full_name":"","date_of_birth":"","age":null,"pan_number":"","mobile":"","email":"","address":"","gender":"",
+"employer_name":"","monthly_income":0,"employment_type":"",
+"cibil_score":null,"credit_vintage_yrs":0,"enquiries_6m":0,"dpd_30_count":0,"dpd_60_count":0,"dpd_90_count":0,
+"writeoff_settled":"no","secured_unsecured_ratio":"","existing_emi_total":0,"total_active_loans":0,
+"total_credit_cards":0,"credit_limit_total":0,"overdue_amount":0,"report_date":"","extraction_notes":""}}""")
+    else:
+        doc_instructions.append('"cibil": null')
+
+    if "BANK" in doc_order:
+        idx = doc_order.index("BANK") + 1
+        doc_instructions.append(f"""
+DOCUMENT {idx} IS THE BANK STATEMENT. Extract into "bank" key:
+{{"account_holder":"","account_number":"","bank_name":"","account_type":"","statement_from":"","statement_to":"",
+"avg_monthly_balance":0,"min_monthly_balance":0,"max_monthly_balance":0,
+"avg_monthly_credit":0,"avg_monthly_debit":0,"bounce_count":0,
+"salary_credits_count":0,"salary_amount":0,"salary_credit_regular":false,"emi_debits_detected":0,
+"emi_accounts_count":0,"cash_withdrawals_monthly_avg":0,"upi_credits_monthly_avg":0,
+"statement_months":0,"closing_balance":0,"inward_cheque_returns":0,"outward_cheque_returns":0,
+"large_unusual_credits":0,"credit_debit_ratio":null,"extraction_notes":""}}""")
+    else:
+        doc_instructions.append('"bank": null')
+
+    if "PAYSLIP" in doc_order:
+        idx = doc_order.index("PAYSLIP") + 1
+        doc_instructions.append(f"""
+DOCUMENT {idx} IS THE PAYSLIP/SALARY SLIP. Extract into "payslip" key:
+{{"employee_name":"","employee_id":"","employer_name":"","employer_pan":"","designation":"","department":"",
+"employment_type":"","pay_period":"","gross_salary":0,"net_salary":0,"basic_salary":0,"hra":0,
+"special_allowance":0,"pf_deduction":0,"tds_deduction":0,"professional_tax":0,"total_deductions":0,
+"uan_number":"","pan_number":"","bank_account_last4":"","months_count":1,"extraction_notes":""}}""")
+    else:
+        doc_instructions.append('"payslip": null')
+
+    prompt = f"""You are an expert Indian lending document extraction system.
+You have been given {len(doc_order)} document(s): {", ".join(doc_order)}.
+Extract data from each document carefully. Return ONLY valid JSON — no explanation, no markdown:
+
+{{
+{chr(10).join(doc_instructions)}
+}}
+
+Rules:
+- Default numeric fields to 0, string fields to "", boolean fields to false
+- For missing/unreadable documents, use null for the entire key
+- pan_number and uan_number: show masked versions if partially visible
+- employment_type must be one of: "Salaried — Private Sector" | "Salaried — Government / PSU" | "Self-Employed Professional" | "Business Owner / Proprietor" | "Freelancer / Consultant" | ""
+"""
+
+    try:
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=3000,
+            messages=[{"role": "user", "content": doc_blocks + [{"type": "text", "text": prompt}]}]
+        )
+        raw    = message.content[0].text.strip().replace("```json","").replace("```","").strip()
+        result = json.loads(raw)
+    except json.JSONDecodeError as e:
+        logger.error(f"parse-documents JSON error: {e}")
+        return JSONResponse({"error": "Could not parse AI response. Please try again."}, status_code=422)
+    except Exception as e:
+        logger.error(f"parse-documents Claude error: {e}")
+        return JSONResponse({"error": f"Document parsing failed: {e}"}, status_code=500)
+
+    # Audit log
+    write_audit_log("BULK_DOC_PARSE", user["username"], user.get("bank_name",""),
+                    {"docs_parsed": doc_order, "cibil_score": (result.get("cibil") or {}).get("cibil_score"),
+                     "net_salary": (result.get("payslip") or {}).get("net_salary")})
+
+    logger.info(f"Bulk parse by {user['username']}: {doc_order} in 1 API call")
+    return JSONResponse({"ok": True, "docs_parsed": doc_order, "data": result})
+
 # ── CIBIL PDF Parser ───────────────────────────────────────────────────────────
 @app.post("/parse-cibil")
 @limiter.limit("5/minute")
@@ -713,7 +864,7 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
 
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1400,
             messages=[{
                 "role": "user",
@@ -815,7 +966,7 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
 
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1500,
             messages=[{
                 "role": "user",
@@ -910,7 +1061,7 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
 
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1200,
             messages=[{
                 "role": "user",
@@ -1536,7 +1687,7 @@ Respond ONLY with this JSON (no other text):
 
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}]
         )
