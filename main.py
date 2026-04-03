@@ -750,8 +750,56 @@ async def parse_documents(
     if not user:
         return JSONResponse({"error": "Session expired. Please log in again."}, status_code=401)
 
-    doc_blocks  = []   # Claude document blocks
+    doc_blocks  = []   # Claude content blocks (text or document)
     doc_order   = []   # track which docs were sent and in what order
+
+    # ── Helper: extract text from PDF bytes using pypdf ────────────────────────
+    # Sending PDFs as raw base64 to Claude uses ~10x more tokens than plain text.
+    # A 20MB bank statement PDF as base64 can exceed the 200k token limit alone.
+    # We extract text first; only fall back to base64 if the PDF is image-only.
+    def _pdf_to_text(pdf_bytes: bytes, label: str, max_chars: int = 60_000) -> str | None:
+        """
+        Extract text from a PDF using pypdf.
+        Returns extracted text (truncated to max_chars) or None if the PDF
+        appears to be scanned/image-only (no extractable text layer).
+        """
+        if not PYPDF_AVAILABLE:
+            return None
+        try:
+            reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+            parts = []
+            for i, page in enumerate(reader.pages):
+                text = page.extract_text() or ""
+                if text.strip():
+                    parts.append(f"--- Page {i+1} ---\n{text}")
+            full_text = "\n".join(parts).strip()
+            if not full_text:
+                logger.info("%s: no text layer found — will send as base64 PDF", label)
+                return None
+            if len(full_text) > max_chars:
+                logger.info("%s: text truncated from %d to %d chars", label, len(full_text), max_chars)
+                full_text = full_text[:max_chars] + "\n[... truncated for token limit ...]"
+            logger.info("%s: extracted %d chars of text", label, len(full_text))
+            return full_text
+        except Exception as e:
+            logger.warning("%s: text extraction failed (%s) — falling back to base64", label, e)
+            return None
+
+    def _make_block(pdf_bytes: bytes, label: str) -> dict:
+        """
+        Return the most token-efficient Claude content block for a PDF:
+        - Text block if text can be extracted (typically 90% fewer tokens)
+        - Base64 document block as fallback for scanned/image-only PDFs
+        """
+        text = _pdf_to_text(pdf_bytes, label)
+        if text:
+            return {"type": "text", "text": f"=== {label} DOCUMENT ===\n{text}"}
+        # Fallback: base64 PDF (only for truly image-based PDFs)
+        return {
+            "type": "document",
+            "source": {"type": "base64", "media_type": "application/pdf",
+                       "data": base64.standard_b64encode(pdf_bytes).decode()}
+        }
 
     async def _load(upload: UploadFile, password: str, max_mb: int, label: str):
         if not upload or not upload.filename:
@@ -790,29 +838,17 @@ async def parse_documents(
     if not any([cibil_bytes, bank_bytes, payslip_bytes]):
         return JSONResponse({"error": "At least one document must be provided."}, status_code=400)
 
-    # Build document blocks for whichever files were supplied
+    # Build content blocks — text extraction first, base64 only as fallback
     if cibil_bytes:
-        doc_blocks.append({
-            "type": "document",
-            "source": {"type": "base64", "media_type": "application/pdf",
-                       "data": base64.standard_b64encode(cibil_bytes).decode()}
-        })
+        doc_blocks.append(_make_block(cibil_bytes, "CIBIL"))
         doc_order.append("CIBIL")
 
     if bank_bytes:
-        doc_blocks.append({
-            "type": "document",
-            "source": {"type": "base64", "media_type": "application/pdf",
-                       "data": base64.standard_b64encode(bank_bytes).decode()}
-        })
+        doc_blocks.append(_make_block(bank_bytes, "BANK"))
         doc_order.append("BANK")
 
     if payslip_bytes:
-        doc_blocks.append({
-            "type": "document",
-            "source": {"type": "base64", "media_type": "application/pdf",
-                       "data": base64.standard_b64encode(payslip_bytes).decode()}
-        })
+        doc_blocks.append(_make_block(payslip_bytes, "PAYSLIP"))
         doc_order.append("PAYSLIP")
 
     # Build prompt dynamically based on which docs are present
