@@ -1615,6 +1615,8 @@ function autofillBankStmt(d) {
   checkNameMismatch();
   checkCrossDocFraud(d, declIncome);
 }
+
+function showCibilError(msg) {
   document.getElementById('cibilUploadArea').style.display = '';
   document.getElementById('cibilPending').classList.remove('visible');
   document.getElementById('cibilError').style.display = 'block';
