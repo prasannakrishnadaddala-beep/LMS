@@ -763,7 +763,12 @@ async def parse_documents(
             raise ValueError(f"{label}: file too large (max {max_mb} MB).")
         if len(raw) < 200:
             raise ValueError(f"{label}: file appears empty or corrupted.")
-        return decrypt_pdf(raw, password.strip())
+        try:
+            return decrypt_pdf(raw, password.strip())
+        except ValueError as e:
+            # Prefix with doc label so the frontend can route the error
+            # to the correct password input field
+            raise ValueError(f"{label}: {e}") from e
 
     try:
         cibil_bytes   = await _load(cibil_file,   cibil_password,   15, "CIBIL report")
