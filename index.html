@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NBFC AI — Smart Lending Platform</title>
+<style>
+  :root { --primary:#4f46e5;--success:#059669;--danger:#dc2626;--warning:#d97706;--bg:#f8fafc;--card:#ffffff;--text:#1e293b;--muted:#64748b;--border:#e2e8f0;--radius:12px; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);}
+  header{background:linear-gradient(135deg,#1e1b4b,#312e81,#4338ca);color:white;padding:18px 24px;display:flex;align-items:center;gap:14px;}
+  .logo{width:44px;height:44px;background:rgba(255,255,255,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;}
+  header h1{font-size:20px;font-weight:700;}
+  header p{font-size:12px;opacity:0.65;margin-top:2px;}
+  .loan-tabs{display:flex;gap:8px;padding:18px 20px 0;flex-wrap:wrap;max-width:980px;margin:0 auto;}
+  .loan-tab{padding:7px 14px;border-radius:20px;border:1.5px solid var(--border);background:white;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;color:var(--muted);}
+  .loan-tab:hover{border-color:var(--primary);color:var(--primary);}
+  .loan-tab.active{background:var(--primary);color:white;border-color:var(--primary);}
+  .container{max-width:980px;margin:18px auto;padding:0 20px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media(max-width:700px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px;}
+  .card h2{font-size:15px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+  .form-group{margin-bottom:13px;}
+  label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px;}
+  input,select{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;color:var(--text);background:white;outline:none;transition:border-color 0.2s;}
+  input:focus,select:focus{border-color:var(--primary);}
+  .hidden{display:none!important;}
+  .info-box{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:11px 13px;margin-bottom:13px;}
+  .info-box p{font-size:12px;color:#0c4a6e;line-height:1.6;}
+  .btn{width:100%;padding:13px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity 0.2s;}
+  .btn:hover{opacity:0.9;}
+  .btn:disabled{opacity:0.6;cursor:not-allowed;}
+  .loader{width:18px;height:18px;border:2.5px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #result-section{display:none;margin-top:22px;}
+  .decision-banner{border-radius:var(--radius);padding:18px 22px;margin-bottom:18px;display:flex;align-items:center;gap:14px;}
+  .decision-banner.approved{background:#ecfdf5;border:2px solid #6ee7b7;}
+  .decision-banner.rejected{background:#fef2f2;border:2px solid #fca5a5;}
+  .decision-banner.conditional{background:#fffbeb;border:2px solid #fcd34d;}
+  .decision-icon{width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}
+  .approved .decision-icon{background:#d1fae5;}.rejected .decision-icon{background:#fee2e2;}.conditional .decision-icon{background:#fef3c7;}
+  .decision-text h3{font-size:18px;font-weight:700;}
+  .approved .decision-text h3{color:var(--success);}.rejected .decision-text h3{color:var(--danger);}.conditional .decision-text h3{color:var(--warning);}
+  .decision-text p{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.6;}
+  .stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:18px;}
+  @media(max-width:600px){.stats-grid{grid-template-columns:1fr 1fr;}}
+  .stat-card{background:white;border:1px solid var(--border);border-radius:10px;padding:13px;text-align:center;}
+  .stat-card .val{font-size:16px;font-weight:700;color:var(--primary);}
+  .stat-card .lbl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:0.4px;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+  @media(max-width:600px){.two-col{grid-template-columns:1fr;}}
+  .list-card{background:white;border:1px solid var(--border);border-radius:10px;padding:15px;}
+  .list-card h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin-bottom:9px;}
+  .list-item{display:flex;align-items:flex-start;gap:7px;font-size:13px;margin-bottom:7px;line-height:1.5;}
+  .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;}
+  .dot.green{background:var(--success);}.dot.red{background:var(--danger);}
+  .docs-section{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;}
+  .docs-section h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin-bottom:9px;}
+  .doc-item{display:inline-block;background:white;border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;margin:3px;}
+  .fraud-flag{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 12px;font-size:12px;color:#9a3412;margin-bottom:6px;}
+  .reg-flag{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;font-size:12px;color:#991b1b;margin-bottom:6px;}
+  .rec-box{background:linear-gradient(135deg,#ede9fe,#ddd6fe);border-radius:10px;padding:14px 18px;}
+  .rec-box p{font-size:13px;color:#4c1d95;line-height:1.6;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#dbeafe;color:#1d4ed8;margin-left:6px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🏦</div>
+  <div>
+    <h1>NBFC AI — Smart Lending Platform v2.0</h1>
+    <p>PL · HL · Car · Gold · Business · LAP · 2W · Education · MFI — All Loan Types · Powered by Claude AI</p>
+  </div>
+</header>
+
+<div class="loan-tabs" id="loanTabs">
+  <div class="loan-tab active" data-type="Personal Loan">💳 Personal</div>
+  <div class="loan-tab" data-type="Home Loan">🏠 Home</div>
+  <div class="loan-tab" data-type="Car Loan">🚗 Car</div>
+  <div class="loan-tab" data-type="Gold Loan">🪙 Gold</div>
+  <div class="loan-tab" data-type="Business Loan">💼 Business</div>
+  <div class="loan-tab" data-type="Loan Against Property">🏢 LAP</div>
+  <div class="loan-tab" data-type="Two-Wheeler Loan">🛵 2-Wheeler</div>
+  <div class="loan-tab" data-type="Education Loan">🎓 Education</div>
+  <div class="loan-tab" data-type="Microfinance / JLG Loan">🤝 MFI/JLG</div>
+</div>
+
+<div class="container">
+  <form id="loanForm">
+    <input type="hidden" name="loan_type" id="loanTypeInput" value="Personal Loan"/>
+    <div class="grid">
+      <div class="card">
+        <h2>👤 Applicant Details</h2>
+        <div class="form-group"><label>Full Name</label><input type="text" name="full_name" placeholder="e.g. Rajesh Kumar" required/></div>
+        <div class="form-group"><label>Age</label><input type="number" name="age" placeholder="e.g. 32" min="18" max="70" required/></div>
+        <div class="form-group"><label>Employment Type</label>
+          <select name="employment_type" required>
+            <option value="">Select</option>
+            <option>Salaried — Private Sector</option>
+            <option>Salaried — Government</option>
+            <option>Self-Employed Professional</option>
+            <option>Business Owner</option>
+            <option>Freelancer / Consultant</option>
+            <option>Farmer / Agricultural</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Monthly Income (Rs)</label><input type="number" name="monthly_income" placeholder="e.g. 75000" required/></div>
+        <div class="form-group"><label>Monthly Expenses (Rs)</label><input type="number" name="monthly_expenses" placeholder="e.g. 35000" required/></div>
+        <div class="form-group">
+          <label>CIBIL Score <span id="cibilNote" style="color:#059669;font-size:11px"></span></label>
+          <input type="number" name="cibil_score" id="cibilInput" placeholder="e.g. 740" min="0" max="900" value="" required/>
+        </div>
+        <div class="form-group"><label>Active Loans Count</label><input type="number" name="existing_loans" placeholder="e.g. 1" min="0" max="10" required/></div>
+        <div class="form-group hidden" id="vintageGroup"><label>Business Vintage (years)</label><input type="number" name="business_vintage" placeholder="e.g. 3" min="0" max="50" value="0"/></div>
+      </div>
+      <div class="card">
+        <h2>💰 Loan Details <span class="badge" id="loanTypeBadge">Personal Loan</span></h2>
+        <div class="info-box"><p id="loanInfoText">💡 Personal Loan: Income stability and CIBIL 700+ are primary factors. No collateral needed.</p></div>
+        <div class="form-group"><label>Loan Amount (Rs)</label><input type="number" name="loan_amount" placeholder="e.g. 500000" required/></div>
+        <div class="form-group"><label>Loan Tenure (months)</label>
+          <select name="loan_tenure" required>
+            <option value="">Select tenure</option>
+            <option value="6">6 months</option><option value="12">12 months</option><option value="24">24 months</option>
+            <option value="36">36 months</option><option value="48">48 months</option><option value="60">60 months (5yr)</option>
+            <option value="84">84 months (7yr)</option><option value="120">120 months (10yr)</option>
+            <option value="180">180 months (15yr)</option><option value="240">240 months (20yr)</option><option value="300">300 months (25yr)</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Loan Purpose</label>
+          <select name="loan_purpose" required>
+            <option value="">Select purpose</option>
+            <option>Home Purchase</option><option>Home Renovation</option><option>Business Expansion</option>
+            <option>Medical Emergency</option><option>Education</option><option>Debt Consolidation</option>
+            <option>Vehicle Purchase</option><option>Wedding / Event</option><option>Working Capital</option>
+            <option>Equipment Purchase</option><option>Agricultural</option>
+          </select>
+        </div>
+        <div class="form-group hidden" id="collateralGroup">
+          <label id="collateralLabel">Collateral / Property Value (Rs)</label>
+          <input type="number" name="collateral_value" placeholder="e.g. 5000000" value="0"/>
+        </div>
+        <button class="btn" type="submit" id="submitBtn">
+          <span id="btnText">⚡ Analyze with AI</span>
+          <div class="loader" id="loader" style="display:none"></div>
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <div id="result-section">
+    <div id="decision-banner" class="decision-banner">
+      <div class="decision-icon" id="decision-icon"></div>
+      <div class="decision-text"><h3 id="decision-title"></h3><p id="decision-reason"></p></div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="val" id="s-type">—</div><div class="lbl">Loan Type</div></div>
+      <div class="stat-card"><div class="val" id="s-amount">—</div><div class="lbl">Approved Amt</div></div>
+      <div class="stat-card"><div class="val" id="s-rate">—</div><div class="lbl">Interest Rate</div></div>
+      <div class="stat-card"><div class="val" id="s-emi">—</div><div class="lbl">EMI / Month</div></div>
+      <div class="stat-card"><div class="val" id="s-foir">—</div><div class="lbl">FOIR Ratio</div></div>
+    </div>
+    <div class="two-col">
+      <div class="list-card"><h4>✅ Strengths</h4><div id="strengths-list"></div></div>
+      <div class="list-card"><h4>⚠️ Concerns</h4><div id="concerns-list"></div></div>
+    </div>
+    <div class="docs-section"><h4>📄 Documents Required</h4><div id="docs-list"></div></div>
+    <div id="flags-section" style="margin-bottom:14px"></div>
+    <div class="rec-box"><p><strong>💡 AI Recommendation:</strong> <span id="rec-text"></span></p></div>
+  </div>
+</div>
+
+<script>
+const loanInfo = {
+  "Personal Loan":"No collateral needed. CIBIL 700+ required. Max tenure 5 years.",
+  "Home Loan":"Max LTV 80%. Legal title check mandatory. Tenure up to 25 years.",
+  "Car Loan":"Vehicle is collateral. LTV up to 85%. Max tenure 7 years.",
+  "Gold Loan":"No CIBIL required. Gold purity checked. RBI LTV cap 75%. Max 12 months.",
+  "Business Loan":"GST + 12-month bank statement needed. Min 2-year business vintage.",
+  "Loan Against Property":"LTV max 65%. Property must be dispute-free. Up to 15 years.",
+  "Two-Wheeler Loan":"Vehicle invoice needed. LTV up to 90%. Max 4 years.",
+  "Education Loan":"Collateral needed above Rs 7.5L. Co-borrower income considered.",
+  "Microfinance / JLG Loan":"No CIBIL required. Group guarantee model. Max Rs 3L."
+};
+const needsCollateral = ["Home Loan","Car Loan","Gold Loan","Loan Against Property","Two-Wheeler Loan","Education Loan"];
+const needsBiz = ["Business Loan"];
+const noCibil = ["Gold Loan","Microfinance / JLG Loan"];
+
+document.getElementById('loanTabs').addEventListener('click',(e)=>{
+  const tab = e.target.closest('.loan-tab');
+  if(!tab) return;
+  document.querySelectorAll('.loan-tab').forEach(t=>t.classList.remove('active'));
+  tab.classList.add('active');
+  const type = tab.dataset.type;
+  document.getElementById('loanTypeInput').value = type;
+  document.getElementById('loanTypeBadge').textContent = type;
+  document.getElementById('loanInfoText').textContent = '💡 ' + loanInfo[type];
+  document.getElementById('collateralGroup').classList.toggle('hidden',!needsCollateral.includes(type));
+  document.getElementById('vintageGroup').classList.toggle('hidden',!needsBiz.includes(type));
+  const nc = noCibil.includes(type);
+  document.getElementById('cibilNote').textContent = nc ? '(Not required)' : '';
+  const ci = document.getElementById('cibilInput');
+  ci.required = !nc;
+  ci.placeholder = nc ? '0 (Not required)' : 'e.g. 740';
+  if(nc) ci.value = '0';
+  else ci.value = '';
+  document.getElementById('collateralLabel').textContent = type==='Gold Loan' ? 'Gold Value (Rs)' : 'Collateral / Property Value (Rs)';
+});
+
+document.getElementById('loanForm').addEventListener('submit',async(e)=>{
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  btn.disabled=true;
+  document.getElementById('btnText').textContent='Analyzing...';
+  document.getElementById('loader').style.display='block';
+  document.getElementById('result-section').style.display='none';
+  try{
+    const res = await fetch('/analyze-loan',{method:'POST',body:new FormData(e.target)});
+    showResult(await res.json());
+  }catch(err){alert('Error: '+err.message);}
+  finally{
+    btn.disabled=false;
+    document.getElementById('btnText').textContent='⚡ Analyze with AI';
+    document.getElementById('loader').style.display='none';
+  }
+});
+
+function fmt(n){return 'Rs '+Number(n).toLocaleString('en-IN');}
+function showResult(d){
+  const sec=document.getElementById('result-section');
+  sec.style.display='block';
+  sec.scrollIntoView({behavior:'smooth'});
+  const banner=document.getElementById('decision-banner');
+  banner.className='decision-banner '+(d.decision||'').toLowerCase();
+  const icons={APPROVED:'✅',REJECTED:'❌',CONDITIONAL:'⚠️'};
+  const labels={APPROVED:'Loan Approved!',REJECTED:'Loan Rejected',CONDITIONAL:'Conditional Approval'};
+  document.getElementById('decision-icon').textContent=icons[d.decision]||'📋';
+  document.getElementById('decision-title').textContent=labels[d.decision]||d.decision;
+  document.getElementById('decision-reason').textContent=d.reason||'';
+  document.getElementById('s-type').textContent=d.loan_type||'—';
+  document.getElementById('s-amount').textContent=d.approved_amount>0?fmt(d.approved_amount):'N/A';
+  document.getElementById('s-rate').textContent=d.approved_amount>0?d.recommended_interest_rate+'%':'N/A';
+  document.getElementById('s-emi').textContent=d.emi_estimate>0?fmt(d.emi_estimate):'N/A';
+  document.getElementById('s-foir').textContent=d.foir+'%';
+  document.getElementById('strengths-list').innerHTML=(d.strengths||[]).map(s=>`<div class="list-item"><span class="dot green"></span>${s}</div>`).join('');
+  document.getElementById('concerns-list').innerHTML=(d.concerns||[]).map(c=>`<div class="list-item"><span class="dot red"></span>${c}</div>`).join('');
+  document.getElementById('docs-list').innerHTML=(d.documentation_required||[]).map(doc=>`<span class="doc-item">📄 ${doc}</span>`).join('');
+  let fl='';
+  (d.fraud_flags||[]).forEach(f=>fl+=`<div class="fraud-flag">🚩 ${f}</div>`);
+  (d.regulatory_flags||[]).forEach(f=>fl+=`<div class="reg-flag">⚖️ ${f}</div>`);
+  document.getElementById('flags-section').innerHTML=fl;
+  document.getElementById('rec-text').textContent=d.recommendation||'';
+}
+</script>
+</body>
+</html>
