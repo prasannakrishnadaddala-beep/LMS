@@ -97,6 +97,8 @@ if not SECRET_KEY:
     logger.warning("⚠️  SECRET_KEY not set — sessions will be invalidated on every restart. Set SECRET_KEY in Railway env vars.")
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme123")
+if ADMIN_PASSWORD == "changeme123":
+    logger.warning("⚠️  ADMIN_PASSWORD is still the default 'changeme123' — set ADMIN_PASSWORD in Railway env vars before going live.")
 
 # ── PII masking for logs/audit (never log raw PAN/Aadhaar) ────────────────────
 def mask_pan(pan: str) -> str:
@@ -182,6 +184,57 @@ LOAN_RULES = {
         "docs": ["Group photograph", "Aadhaar", "Household income declaration", "MFI no-objection certificate", "Gram panchayat / ration card"]
     }
 }
+
+# ── Per-bank policy overrides ──────────────────────────────────────────────────
+# Keys must match the bank_name stored in the users table exactly.
+# Only fields listed here override the global LOAN_RULES; all others fall through.
+# Add new banks or adjust thresholds without touching LOAN_RULES.
+BANK_POLICIES: dict[str, dict[str, dict]] = {
+    "HDFC Bank": {
+        "Personal Loan":        {"min_cibil": 720, "max_foir": 45, "rate_range": [11, 22]},
+        "Home Loan":            {"min_cibil": 680, "max_foir": 50},
+        "Car Loan":             {"min_cibil": 700, "max_foir": 48},
+        "Business Loan":        {"min_cibil": 700, "max_foir": 55, "rate_range": [13, 22]},
+    },
+    "ICICI Bank": {
+        "Personal Loan":        {"min_cibil": 700, "max_foir": 50, "rate_range": [10.5, 22]},
+        "Home Loan":            {"min_cibil": 650, "max_foir": 55},
+        "Loan Against Property":{"min_cibil": 650, "max_foir": 55, "max_ltv": 70},
+    },
+    "Axis Bank": {
+        "Personal Loan":        {"min_cibil": 700, "max_foir": 50},
+        "Home Loan":            {"min_cibil": 650, "max_foir": 55},
+    },
+    "Bajaj Finance": {
+        "Personal Loan":        {"min_cibil": 680, "max_foir": 55, "rate_range": [13, 26]},
+        "Two-Wheeler Loan":     {"min_cibil": 600, "max_foir": 50, "max_ltv": 95},
+        "Business Loan":        {"min_cibil": 675, "max_foir": 60, "rate_range": [15, 26]},
+    },
+    "Shriram Finance": {
+        "Two-Wheeler Loan":     {"min_cibil": 0, "max_foir": 55, "max_ltv": 95, "rate_range": [14, 26]},
+        "Car Loan":             {"min_cibil": 0, "max_foir": 55, "max_ltv": 90, "rate_range": [12, 22]},
+        "Business Loan":        {"min_cibil": 650, "max_foir": 60, "rate_range": [16, 28]},
+    },
+    "Muthoot Finance": {
+        "Gold Loan":            {"rate_range": [9, 16], "max_ltv": 75},
+        "Personal Loan":        {"min_cibil": 700, "max_foir": 45, "rate_range": [14, 24]},
+    },
+    "Manappuram Finance": {
+        "Gold Loan":            {"rate_range": [12, 26], "max_ltv": 75},
+    },
+}
+
+def get_effective_rules(loan_type: str, bank_name: str) -> dict:
+    """
+    Merge global LOAN_RULES with any per-bank overrides for this (loan_type, bank_name) pair.
+    Returns a new dict — never mutates LOAN_RULES.
+    """
+    base = LOAN_RULES.get(loan_type, {}).copy()
+    overrides = BANK_POLICIES.get(bank_name, {}).get(loan_type, {})
+    if overrides:
+        base.update(overrides)
+        logger.info(f"Bank policy applied: {bank_name} / {loan_type} → overrides={list(overrides.keys())}")
+    return base
 
 # ── Password hashing (stdlib only, no extra deps) ──────────────────────────────
 def hash_password(password: str) -> str:
@@ -1318,6 +1371,36 @@ def run_fraud_gate(data: dict) -> list:
     return flags
 
 
+# ── Deterministic Confidence Score Engine ─────────────────────────────────────
+def compute_confidence(cibil_pdf: bool, bank_parsed: bool, payslip_parsed: bool,
+                       income_source: str, emp_source: str) -> int:
+    """
+    Rule-based confidence score — used as a floor/override for the AI-assigned score.
+    More documents verified = higher confidence. Never fully delegated to the LLM.
+
+    Scoring:
+      Base (manual-only)    = 40
+      + Payslip verified    = +30  (highest: authoritative employer + income proof)
+      + Bank stmt verified  = +15  (secondary: cash-flow confirmation)
+      + CIBIL PDF verified  = +10  (tertiary: bureau data quality)
+      + Payslip income src  = +5   (income from most reliable source)
+      + Bank income src     = +3
+    Max = 100
+    """
+    score = 40
+    if payslip_parsed:
+        score += 30
+    if bank_parsed:
+        score += 15
+    if cibil_pdf:
+        score += 10
+    if income_source == "PAYSLIP":
+        score += 5
+    elif income_source == "BANK":
+        score += 3
+    return min(score, 100)
+
+
 # ── REST API — for LMS / MuleSoft integration ─────────────────────────────────
 @app.post("/api/v1/analyze")
 @limiter.limit("20/minute")
@@ -1519,7 +1602,7 @@ def _run_analysis(body: dict, user: dict) -> dict:
     if loan_type not in LOAN_RULES:
         return {"error": "Invalid loan type."}
 
-    rules = LOAN_RULES[loan_type]
+    rules = get_effective_rules(loan_type, user.get("bank_name", ""))
 
     # EMI & FOIR
     rate_mid     = (rules["rate_range"][0] + rules["rate_range"][1]) / 2
@@ -1729,6 +1812,18 @@ Respond ONLY with this JSON (no other text):
         logger.error(f"Claude error: {e}")
         return {"error": str(e)}
 
+    # Deterministic confidence score — use as floor; never let Claude return lower
+    # than what the document evidence warrants.
+    rule_based_confidence = compute_confidence(
+        cibil_pdf=cibil_pdf_parsed,
+        bank_parsed=bank_stmt_parsed,
+        payslip_parsed=payslip_pdf_parsed,
+        income_source=income_source,
+        emp_source=emp_source,
+    )
+    ai_confidence = int(result.get("confidence_score") or 0)
+    final_confidence = max(rule_based_confidence, ai_confidence)
+
     result.update({
         "application_id": app_id, "loan_type": loan_type,
         "applicant_name": full_name, "loan_amount": loan_amount,
@@ -1739,7 +1834,7 @@ Respond ONLY with this JSON (no other text):
         "payslip_pdf_parsed": payslip_pdf_parsed,
         "employment_source": emp_source,
         "income_source": income_source,
-        "confidence_score": result.get("confidence_score", 0),
+        "confidence_score": final_confidence,
         "fraud_flags": result.get("fraud_flags", pre_fraud_flags),
         "redecision_hints": result.get("redecision_hints"),
     })
