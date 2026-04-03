@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NBFC AI — User Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--primary:#0e4f35;--gold:#c8972e;--bg:#eeeae2;--border:#d5d0c5;--muted:#6b7c77;--radius:12px;--danger:#c0392b;--success:#1a7f5a;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:#1a1a1a;}
+nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,.2);position:sticky;top:0;z-index:100;}
+.nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav-logo{width:34px;height:34px;background:rgba(200,151,46,.2);border:1px solid rgba(200,151,46,.4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.nav-title{color:white;font-size:15px;font-weight:600;}
+.nav-title span{color:#c8972e;font-family:'DM Serif Display',serif;}
+.nav-right{display:flex;gap:6px;}
+.nav-link{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,.75);text-decoration:none;transition:background .15s;cursor:pointer;border:none;background:none;font-family:'DM Sans',sans-serif;}
+.nav-link:hover{background:rgba(255,255,255,.1);color:white;}
+
+.container{max-width:1100px;margin:28px auto;padding:0 24px;}
+.page-header{margin-bottom:22px;display:flex;align-items:center;gap:16px;}
+.page-header h1{font-family:'DM Serif Display',serif;font-size:24px;color:var(--primary);}
+.page-header p{font-size:13px;color:var(--muted);margin-top:3px;}
+
+.grid{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;}
+@media(max-width:800px){.grid{grid-template-columns:1fr;}}
+
+.card{background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.card-head{padding:14px 20px;border-bottom:1px solid #f0ede6;background:#fafaf8;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--primary);}
+.card-body{padding:20px;}
+
+table{width:100%;border-collapse:collapse;}
+thead th{padding:10px 14px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);background:#f8f7f3;border-bottom:1px solid var(--border);white-space:nowrap;}
+tbody tr{border-bottom:1px solid #f0ede6;transition:background .12s;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:#fafaf8;}
+tbody td{padding:11px 14px;font-size:13px;}
+.role-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.3px;}
+.role-badge.admin{background:#fef3c7;color:#92400e;}
+.role-badge.analyst{background:#d1fae5;color:#065f46;}
+.role-badge.viewer{background:#e0f2fe;color:#075985;}
+.api-key{font-family:monospace;font-size:11px;color:var(--muted);background:#f8f7f3;padding:2px 6px;border-radius:4px;letter-spacing:0;}
+
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:10px;font-weight:700;color:#374151;margin-bottom:5px;letter-spacing:0.5px;text-transform:uppercase;}
+.field input,.field select{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;color:#1a1a1a;background:#fafaf8;outline:none;transition:border-color .2s;}
+.field input:focus,.field select:focus{border-color:var(--primary);}
+.btn{width:100%;padding:12px;background:var(--primary);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:background .2s;}
+.btn:hover{background:#0a3320;}
+.hint{font-size:11px;color:var(--muted);margin-top:3px;}
+
+.api-info{background:rgba(14,79,53,.05);border:1px solid rgba(14,79,53,.15);border-radius:8px;padding:12px 14px;margin-top:16px;font-size:12px;color:var(--primary);line-height:1.7;}
+.api-info strong{display:block;margin-bottom:4px;}
+.api-info code{background:#e8f5e9;padding:1px 5px;border-radius:3px;font-size:11px;font-family:monospace;}
+</style>
+</head>
+<body>
+<nav>
+  <a class="nav-brand" href="/">
+    <div class="nav-logo">🏦</div>
+    <span class="nav-title">NBFC <span>AI</span></span>
+  </a>
+  <div class="nav-right">
+    <a class="nav-link" href="/">Analysis</a>
+    <a class="nav-link" href="/dashboard">Dashboard</a>
+    <form method="post" action="/logout" style="display:inline">
+      <button class="nav-link" type="submit">Sign Out</button>
+    </form>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <div>
+      <h1>User Management</h1>
+      <p>Create users per bank. Each gets their own login and API key for LMS integration.</p>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Users table -->
+    <div class="card">
+      <div class="card-head">All Users</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Bank</th>
+            <th>API Key</th>
+            <th>Status</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td><strong>{{ u.username }}</strong></td>
+            <td><span class="role-badge {{ u.role }}">{{ u.role }}</span></td>
+            <td style="color:var(--muted);font-size:12px;">{{ u.bank_name }}</td>
+            <td>
+              {% if u.api_key %}
+              <span class="api-key">{{ u.api_key[:16] }}…</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if u.is_active %}
+              <span style="color:#1a7f5a;font-size:12px;font-weight:600;">● Active</span>
+              {% else %}
+              <span style="color:#c0392b;font-size:12px;font-weight:600;">● Inactive</span>
+              {% endif %}
+            </td>
+            <td style="color:var(--muted);font-size:12px;">{{ u.created_at }}</td>
+          </tr>
+          {% endfor %}
+          {% if not users %}
+          <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px;">No users yet.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Create user -->
+    <div>
+      <div class="card">
+        <div class="card-head">Create New User</div>
+        <div class="card-body">
+          <form method="post" action="/admin/users/create">
+            <div class="field">
+              <label>Username</label>
+              <input type="text" name="username" placeholder="e.g. hdfc_analyst" required/>
+            </div>
+            <div class="field">
+              <label>Password</label>
+              <input type="password" name="password" placeholder="Min 8 characters" required minlength="8"/>
+            </div>
+            <div class="field">
+              <label>Role</label>
+              <select name="role">
+                <option value="analyst">Analyst — can analyze loans</option>
+                <option value="viewer">Viewer — dashboard only</option>
+                <option value="admin">Admin — full access</option>
+              </select>
+              <div class="hint">Analysts can run loan analysis. Viewers can only see dashboard.</div>
+            </div>
+            <div class="field">
+              <label>Bank / Organization Name</label>
+              <input type="text" name="bank_name" placeholder="e.g. HDFC Bank, Axis Finance" required/>
+              <div class="hint">Dashboard data is scoped per bank. Admins see all.</div>
+            </div>
+            <button type="submit" class="btn">Create User + Generate API Key</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="api-info" style="margin-top:16px;">
+        <strong>🔌 REST API for LMS Integration</strong>
+        Use each user's API key to integrate with your LMS or MuleSoft:
+        <code>POST /api/v1/analyze</code><br/>
+        Header: <code>X-API-Key: &lt;user's api key&gt;</code><br/>
+        Body: JSON with same fields as the loan form.<br/>
+        See <code>GET /health</code> for status and capabilities.
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

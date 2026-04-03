@@ -1,17 +1,10 @@
-from fastapi import FastAPI, Request, Form, Response, Cookie
+from fastapi import FastAPI, Request, Form, Response, Cookie, UploadFile, File, Header
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import anthropic
-import os
-import json
-import pg8000.native
-import ssl
+import os, json, pg8000.native, ssl, base64, hashlib, secrets, string, random, logging
 from urllib.parse import urlparse
 from datetime import datetime, timezone
-import secrets
-import string
-import random
-import logging
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -20,7 +13,7 @@ from slowapi.errors import RateLimitExceeded
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Startup validation ─────────────────────────────────────────────────────────
+# ── Env vars ───────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 if not ANTHROPIC_API_KEY:
     raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set")
@@ -32,7 +25,7 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme123")
 
 # ── App setup ──────────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="NBFC AI Platform v3.0")
+app = FastAPI(title="NBFC AI Platform v4.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 templates  = Jinja2Templates(directory="templates")
@@ -106,6 +99,182 @@ LOAN_RULES = {
     }
 }
 
+# ── Password hashing (stdlib only, no extra deps) ──────────────────────────────
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    key  = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+    return f"{salt}:{key.hex()}"
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        salt, key_hex = stored.split(":", 1)
+        key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+        return secrets.compare_digest(key.hex(), key_hex)
+    except Exception:
+        return False
+
+# ── Database ───────────────────────────────────────────────────────────────────
+def get_db_conn():
+    parsed  = urlparse(DATABASE_URL)
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode    = ssl.CERT_NONE
+    return pg8000.native.Connection(
+        host=parsed.hostname, database=parsed.path.lstrip("/"),
+        user=parsed.username, password=parsed.password,
+        port=parsed.port or 5432, ssl_context=ssl_ctx
+    )
+
+def _run_ddl(conn, sql: str):
+    """Run DDL safely, committing immediately."""
+    conn.run("COMMIT")
+    conn.run(sql)
+    conn.run("COMMIT")
+
+def init_db():
+    if not DATABASE_URL:
+        logger.warning("⚠️  DATABASE_URL not set — running without persistence")
+        return
+    try:
+        conn = get_db_conn()
+
+        # Users table — for multi-bank, multi-user login
+        _run_ddl(conn, """
+            CREATE TABLE IF NOT EXISTS users (
+                id            SERIAL PRIMARY KEY,
+                username      VARCHAR(50)  UNIQUE NOT NULL,
+                password_hash VARCHAR(300) NOT NULL,
+                role          VARCHAR(20)  DEFAULT 'analyst',
+                bank_name     VARCHAR(100) DEFAULT 'Default',
+                api_key       VARCHAR(64)  UNIQUE,
+                is_active     BOOLEAN      DEFAULT TRUE,
+                created_at    TIMESTAMPTZ  DEFAULT NOW()
+            )
+        """)
+
+        # Loan applications table
+        _run_ddl(conn, """
+            CREATE TABLE IF NOT EXISTS loan_applications (
+                id                     SERIAL PRIMARY KEY,
+                application_id         VARCHAR(30)   UNIQUE NOT NULL,
+                applicant_name         VARCHAR(100),
+                age                    INTEGER,
+                employment_type        VARCHAR(60),
+                employer_name          VARCHAR(100),
+                loan_type              VARCHAR(60),
+                loan_amount            NUMERIC(15,2),
+                loan_tenure            INTEGER,
+                cibil_score            INTEGER,
+                dpd_30_count           INTEGER       DEFAULT 0,
+                dpd_60_count           INTEGER       DEFAULT 0,
+                dpd_90_count           INTEGER       DEFAULT 0,
+                enquiries_6m           INTEGER       DEFAULT 0,
+                credit_vintage_yrs     NUMERIC(4,1)  DEFAULT 0,
+                avg_monthly_balance    NUMERIC(15,2) DEFAULT 0,
+                bounce_count_6m        INTEGER       DEFAULT 0,
+                monthly_income         NUMERIC(15,2),
+                itr_income             NUMERIC(15,2) DEFAULT 0,
+                gst_turnover           NUMERIC(15,2) DEFAULT 0,
+                decision               VARCHAR(20),
+                policy_violations      TEXT          DEFAULT '[]',
+                risk_level             VARCHAR(10),
+                risk_score             INTEGER,
+                approved_amount        NUMERIC(15,2),
+                interest_rate          NUMERIC(5,2),
+                foir                   NUMERIC(5,1),
+                ltv                    NUMERIC(5,1),
+                emi_estimate           NUMERIC(15,2),
+                fraud_flags            TEXT          DEFAULT '[]',
+                regulatory_flags       TEXT          DEFAULT '[]',
+                strengths              TEXT          DEFAULT '[]',
+                concerns               TEXT          DEFAULT '[]',
+                documentation_required TEXT          DEFAULT '[]',
+                reason                 TEXT,
+                recommendation         TEXT,
+                counter_offer          TEXT,
+                bureau_assessment      TEXT,
+                cashflow_assessment    TEXT,
+                created_by             VARCHAR(50),
+                bank_name              VARCHAR(100),
+                cibil_pdf_parsed       BOOLEAN       DEFAULT FALSE,
+                created_at             TIMESTAMPTZ   DEFAULT NOW()
+            )
+        """)
+
+        # Seed admin user if not exists
+        existing = conn.run(
+            "SELECT COUNT(*) FROM users WHERE username = :u",
+            u=ADMIN_USERNAME
+        )
+        if not existing or existing[0][0] == 0:
+            admin_key = secrets.token_hex(32)
+            conn.run(
+                """INSERT INTO users (username, password_hash, role, bank_name, api_key)
+                   VALUES (:u, :h, 'admin', 'NBFC Platform', :k)""",
+                u=ADMIN_USERNAME,
+                h=hash_password(ADMIN_PASSWORD),
+                k=admin_key
+            )
+            logger.info(f"✅ Admin user seeded. API Key: {admin_key}")
+        conn.close()
+        logger.info("✅ Database initialized")
+    except Exception as e:
+        logger.error(f"❌ DB init failed: {e}")
+
+@app.on_event("startup")
+async def startup():
+    init_db()
+
+# ── Utilities ──────────────────────────────────────────────────────────────────
+def generate_app_id() -> str:
+    today  = datetime.now(timezone.utc).strftime("%Y%m%d")
+    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    return f"LN-{today}-{suffix}"
+
+def verify_session(session) -> dict | None:
+    """Returns {username, role, bank_name} or None."""
+    if not session:
+        return None
+    try:
+        data = serializer.loads(session, max_age=86400)
+        return data if "username" in data else None
+    except (BadSignature, SignatureExpired):
+        return None
+
+def get_user_from_db(username: str) -> dict | None:
+    if not DATABASE_URL:
+        return None
+    try:
+        conn = get_db_conn()
+        rows = conn.run(
+            "SELECT username, password_hash, role, bank_name, is_active FROM users WHERE username = :u",
+            u=username
+        )
+        conn.close()
+        if rows:
+            r = rows[0]
+            return {"username": r[0], "password_hash": r[1], "role": r[2], "bank_name": r[3], "is_active": r[4]}
+    except Exception as e:
+        logger.error(f"get_user_from_db: {e}")
+    return None
+
+def get_user_from_api_key(api_key: str) -> dict | None:
+    if not DATABASE_URL or not api_key:
+        return None
+    try:
+        conn = get_db_conn()
+        rows = conn.run(
+            "SELECT username, role, bank_name FROM users WHERE api_key = :k AND is_active = TRUE",
+            k=api_key
+        )
+        conn.close()
+        if rows:
+            r = rows[0]
+            return {"username": r[0], "role": r[1], "bank_name": r[2]}
+    except Exception as e:
+        logger.error(f"get_user_from_api_key: {e}")
+    return None
+
 # ── Hard Policy Gate ───────────────────────────────────────────────────────────
 def run_policy_gate(data: dict, rules: dict) -> list:
     violations = []
@@ -136,7 +305,6 @@ def run_policy_gate(data: dict, rules: dict) -> list:
         violations.append("MFI loan exceeds RBI cap of Rs 1,25,000 per borrower")
     return violations
 
-
 # ── Risk-based pricing ─────────────────────────────────────────────────────────
 def compute_risk_rate(base_rate: float, cibil: int, foir: float, dpd_30: int, enq_6m: int) -> float:
     spread = 0.0
@@ -151,108 +319,34 @@ def compute_risk_rate(base_rate: float, cibil: int, foir: float, dpd_30: int, en
     if enq_6m > 3: spread += 0.5
     return round(base_rate + spread, 2)
 
-
-# ── Database ───────────────────────────────────────────────────────────────────
-def get_db_conn():
-    parsed  = urlparse(DATABASE_URL)
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode    = ssl.CERT_NONE
-    return pg8000.native.Connection(
-        host=parsed.hostname, database=parsed.path.lstrip("/"),
-        user=parsed.username, password=parsed.password,
-        port=parsed.port or 5432, ssl_context=ssl_ctx
-    )
-
-def init_db():
-    try:
-        conn = get_db_conn()
-        conn.run("""
-            CREATE TABLE IF NOT EXISTS loan_applications (
-                id                    SERIAL PRIMARY KEY,
-                application_id        VARCHAR(30)   UNIQUE NOT NULL,
-                applicant_name        VARCHAR(100),
-                age                   INTEGER,
-                employment_type       VARCHAR(60),
-                employer_name         VARCHAR(100),
-                loan_type             VARCHAR(60),
-                loan_amount           NUMERIC(15,2),
-                loan_tenure           INTEGER,
-                cibil_score           INTEGER,
-                dpd_30_count          INTEGER       DEFAULT 0,
-                dpd_60_count          INTEGER       DEFAULT 0,
-                dpd_90_count          INTEGER       DEFAULT 0,
-                enquiries_6m          INTEGER       DEFAULT 0,
-                credit_vintage_yrs    NUMERIC(4,1)  DEFAULT 0,
-                avg_monthly_balance   NUMERIC(15,2) DEFAULT 0,
-                bounce_count_6m       INTEGER       DEFAULT 0,
-                monthly_income        NUMERIC(15,2),
-                itr_income            NUMERIC(15,2) DEFAULT 0,
-                gst_turnover          NUMERIC(15,2) DEFAULT 0,
-                decision              VARCHAR(20),
-                policy_violations     TEXT          DEFAULT '[]',
-                risk_level            VARCHAR(10),
-                risk_score            INTEGER,
-                approved_amount       NUMERIC(15,2),
-                interest_rate         NUMERIC(5,2),
-                foir                  NUMERIC(5,1),
-                ltv                   NUMERIC(5,1),
-                emi_estimate          NUMERIC(15,2),
-                fraud_flags           TEXT          DEFAULT '[]',
-                regulatory_flags      TEXT          DEFAULT '[]',
-                strengths             TEXT          DEFAULT '[]',
-                concerns              TEXT          DEFAULT '[]',
-                documentation_required TEXT         DEFAULT '[]',
-                reason                TEXT,
-                recommendation        TEXT,
-                counter_offer         TEXT,
-                bureau_assessment     TEXT,
-                cashflow_assessment   TEXT,
-                created_at            TIMESTAMPTZ   DEFAULT NOW()
-            )
-        """)
-        conn.close()
-        logger.info("✅ Database initialized")
-    except Exception as e:
-        logger.error(f"❌ DB init failed: {e}")
-
-@app.on_event("startup")
-async def startup():
-    if DATABASE_URL:
-        init_db()
-    else:
-        logger.warning("⚠️  DATABASE_URL not set — running without persistence")
-
-
-# ── Utilities ──────────────────────────────────────────────────────────────────
-def generate_app_id() -> str:
-    today  = datetime.now(timezone.utc).strftime("%Y%m%d")
-    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
-    return f"LN-{today}-{suffix}"
-
-def verify_session(session) -> str | None:
-    if not session:
-        return None
-    try:
-        data = serializer.loads(session, max_age=86400)
-        return data.get("username")
-    except (BadSignature, SignatureExpired):
-        return None
-
-
-# ── Auth ───────────────────────────────────────────────────────────────────────
+# ── Auth routes ────────────────────────────────────────────────────────────────
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request, "error": None})
 
 @app.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...)):
-    if username.strip() == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-        token = serializer.dumps({"username": username.strip()})
-        resp  = RedirectResponse(url="/", status_code=303)
-        resp.set_cookie("session", token, httponly=True, max_age=86400, samesite="lax")
-        return resp
-    return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials."})
+    username = username.strip()
+    user     = get_user_from_db(username)
+
+    # DB user found — verify against DB
+    if user:
+        if not user["is_active"]:
+            return templates.TemplateResponse("login.html", {"request": request, "error": "Account deactivated. Contact admin."})
+        if not verify_password(password, user["password_hash"]):
+            return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials."})
+        session_data = {"username": username, "role": user["role"], "bank_name": user["bank_name"]}
+    else:
+        # Fallback: env-var admin (for no-DB / first run)
+        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+            session_data = {"username": username, "role": "admin", "bank_name": "NBFC Platform"}
+        else:
+            return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials."})
+
+    token = serializer.dumps(session_data)
+    resp  = RedirectResponse(url="/", status_code=303)
+    resp.set_cookie("session", token, httponly=True, max_age=86400, samesite="lax")
+    return resp
 
 @app.post("/logout")
 def logout():
@@ -260,72 +354,282 @@ def logout():
     resp.delete_cookie("session")
     return resp
 
-
 # ── Main pages ─────────────────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, session: str = Cookie(default=None)):
-    username = verify_session(session)
-    if not username:
+    user = verify_session(session)
+    if not user:
         return RedirectResponse(url="/login", status_code=303)
     return templates.TemplateResponse("index.html", {
-        "request": request, "loan_types": list(LOAN_RULES.keys()), "username": username
+        "request": request,
+        "loan_types": list(LOAN_RULES.keys()),
+        "username": user["username"],
+        "role": user.get("role", "analyst"),
+        "bank_name": user.get("bank_name", ""),
     })
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, session: str = Cookie(default=None)):
-    username = verify_session(session)
-    if not username:
+    user = verify_session(session)
+    if not user:
         return RedirectResponse(url="/login", status_code=303)
 
-    stats = {"total": 0, "approved": 0, "rejected": 0, "conditional": 0, "approval_rate": 0.0}
+    stats = {"total": 0, "approved": 0, "rejected": 0, "conditional": 0, "approval_rate": 0.0,
+             "avg_cibil": 0, "avg_foir": 0, "avg_loan_amt": 0}
     applications = []
+    chart_data   = {"decisions": [], "loan_types": [], "monthly": []}
 
     if DATABASE_URL:
         try:
             conn = get_db_conn()
-            rows = conn.run("""
+            # Scope to bank unless admin
+            bank_filter = "" if user.get("role") == "admin" else "WHERE bank_name = :bn"
+            params      = {} if user.get("role") == "admin" else {"bn": user.get("bank_name")}
+
+            rows = conn.run(f"""
                 SELECT application_id, applicant_name, loan_type, loan_amount,
                        decision, risk_level, risk_score, approved_amount,
                        interest_rate, foir, cibil_score, employment_type, created_at,
-                       dpd_30_count, dpd_90_count, enquiries_6m, bounce_count_6m
-                FROM loan_applications ORDER BY created_at DESC LIMIT 100
-            """)
+                       dpd_30_count, dpd_90_count, enquiries_6m, bounce_count_6m,
+                       created_by, bank_name, cibil_pdf_parsed
+                FROM loan_applications {bank_filter}
+                ORDER BY created_at DESC LIMIT 100
+            """, **params)
             for r in rows:
                 applications.append({
-                    "application_id":  r[0], "applicant_name": r[1],
-                    "loan_type":       r[2], "loan_amount":    float(r[3] or 0),
-                    "decision":        r[4], "risk_level":     r[5],
-                    "risk_score":      r[6], "approved_amount":float(r[7] or 0),
-                    "interest_rate":   float(r[8] or 0), "foir": float(r[9] or 0),
-                    "cibil_score":     r[10], "employment_type": r[11],
-                    "created_at":      r[12].strftime("%d %b %Y, %I:%M %p") if r[12] else "",
-                    "dpd_30_count":    r[13], "dpd_90_count": r[14],
-                    "enquiries_6m":    r[15], "bounce_count_6m": r[16],
+                    "application_id": r[0], "applicant_name": r[1],
+                    "loan_type": r[2],      "loan_amount": float(r[3] or 0),
+                    "decision": r[4],       "risk_level": r[5],
+                    "risk_score": r[6],     "approved_amount": float(r[7] or 0),
+                    "interest_rate": float(r[8] or 0), "foir": float(r[9] or 0),
+                    "cibil_score": r[10],   "employment_type": r[11],
+                    "created_at": r[12].strftime("%d %b %Y, %I:%M %p") if r[12] else "",
+                    "dpd_30_count": r[13],  "dpd_90_count": r[14],
+                    "enquiries_6m": r[15],  "bounce_count_6m": r[16],
+                    "created_by": r[17],    "bank_name": r[18],
+                    "cibil_pdf_parsed": r[19],
                 })
-            counts = conn.run("""
-                SELECT COUNT(*),
+
+            counts = conn.run(f"""
+                SELECT
+                    COUNT(*),
                     COUNT(*) FILTER (WHERE decision='APPROVED'),
                     COUNT(*) FILTER (WHERE decision='REJECTED'),
-                    COUNT(*) FILTER (WHERE decision='CONDITIONAL')
-                FROM loan_applications
-            """)
+                    COUNT(*) FILTER (WHERE decision='CONDITIONAL'),
+                    ROUND(AVG(cibil_score)::numeric, 0),
+                    ROUND(AVG(foir)::numeric, 1),
+                    ROUND(AVG(loan_amount)::numeric, 0)
+                FROM loan_applications {bank_filter}
+            """, **params)
             if counts:
-                t, a, r_, c = counts[0]
+                t, a, r_, c, ac, af, al = counts[0]
                 t = int(t or 0); a = int(a or 0)
-                stats = {"total": t, "approved": a, "rejected": int(r_ or 0),
-                         "conditional": int(c or 0),
-                         "approval_rate": round((a/t*100) if t > 0 else 0, 1)}
+                stats = {
+                    "total": t, "approved": a,
+                    "rejected": int(r_ or 0), "conditional": int(c or 0),
+                    "approval_rate": round((a/t*100) if t > 0 else 0, 1),
+                    "avg_cibil": int(ac or 0), "avg_foir": float(af or 0),
+                    "avg_loan_amt": int(al or 0),
+                }
+
+            # Chart data: decision breakdown
+            chart_data["decisions"] = [
+                {"label": "Approved", "value": stats["approved"], "color": "#1a7f5a"},
+                {"label": "Rejected", "value": stats["rejected"], "color": "#c0392b"},
+                {"label": "Conditional", "value": stats["conditional"], "color": "#c17f24"},
+            ]
+            # Chart data: loan type breakdown
+            lt_rows = conn.run(f"""
+                SELECT loan_type, COUNT(*) as cnt
+                FROM loan_applications {bank_filter}
+                GROUP BY loan_type ORDER BY cnt DESC
+            """, **params)
+            chart_data["loan_types"] = [{"label": r[0], "value": int(r[1])} for r in lt_rows]
+
+            # Chart data: last 7 days
+            day_rows = conn.run(f"""
+                SELECT DATE(created_at) as d, COUNT(*) as cnt,
+                       COUNT(*) FILTER (WHERE decision='APPROVED') as app
+                FROM loan_applications {bank_filter}
+                WHERE created_at >= NOW() - INTERVAL '7 days'
+                GROUP BY d ORDER BY d
+            """, **params)
+            chart_data["monthly"] = [{"date": str(r[0]), "total": int(r[1]), "approved": int(r[2])} for r in day_rows]
+
             conn.close()
         except Exception as e:
             logger.error(f"Dashboard error: {e}")
 
     return templates.TemplateResponse("dashboard.html", {
-        "request": request, "username": username,
-        "stats": stats, "applications": applications
+        "request": request, "username": user["username"],
+        "role": user.get("role", "analyst"),
+        "bank_name": user.get("bank_name", ""),
+        "stats": stats, "applications": applications,
+        "chart_data_json": json.dumps(chart_data),
     })
 
+# ── Admin: User management ─────────────────────────────────────────────────────
+@app.get("/admin/users", response_class=HTMLResponse)
+def admin_users(request: Request, session: str = Cookie(default=None)):
+    user = verify_session(session)
+    if not user or user.get("role") != "admin":
+        return RedirectResponse(url="/", status_code=303)
+    users_list = []
+    if DATABASE_URL:
+        try:
+            conn = get_db_conn()
+            rows = conn.run(
+                "SELECT username, role, bank_name, api_key, is_active, created_at FROM users ORDER BY created_at DESC"
+            )
+            conn.close()
+            for r in rows:
+                users_list.append({
+                    "username": r[0], "role": r[1], "bank_name": r[2],
+                    "api_key": r[3], "is_active": r[4],
+                    "created_at": r[5].strftime("%d %b %Y") if r[5] else ""
+                })
+        except Exception as e:
+            logger.error(f"admin_users: {e}")
+    return templates.TemplateResponse("admin_users.html", {
+        "request": request, "username": user["username"],
+        "users": users_list
+    })
 
-# ── Loan analysis ──────────────────────────────────────────────────────────────
+@app.post("/admin/users/create")
+def create_user(
+    request: Request,
+    session: str  = Cookie(default=None),
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str     = Form("analyst"),
+    bank_name: str= Form("Default"),
+):
+    user = verify_session(session)
+    if not user or user.get("role") != "admin":
+        return JSONResponse({"error": "Forbidden"}, status_code=403)
+    if not DATABASE_URL:
+        return JSONResponse({"error": "No database configured."}, status_code=500)
+    try:
+        api_key = secrets.token_hex(32)
+        conn    = get_db_conn()
+        conn.run(
+            """INSERT INTO users (username, password_hash, role, bank_name, api_key)
+               VALUES (:u, :h, :r, :b, :k)""",
+            u=username.strip(), h=hash_password(password),
+            r=role, b=bank_name.strip(), k=api_key
+        )
+        conn.close()
+        return RedirectResponse(url="/admin/users", status_code=303)
+    except Exception as e:
+        logger.error(f"create_user: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ── CIBIL PDF Parser ───────────────────────────────────────────────────────────
+@app.post("/parse-cibil")
+@limiter.limit("5/minute")
+async def parse_cibil(
+    request: Request,
+    session: str  = Cookie(default=None),
+    file: UploadFile = File(...),
+):
+    user = verify_session(session)
+    if not user:
+        return JSONResponse({"error": "Session expired. Please log in again."}, status_code=401)
+
+    # Validate file
+    fname = (file.filename or "").lower()
+    if not fname.endswith(".pdf"):
+        return JSONResponse({"error": "Please upload a CIBIL report PDF file."}, status_code=400)
+
+    content = await file.read()
+    if len(content) > 15 * 1024 * 1024:  # 15 MB limit
+        return JSONResponse({"error": "PDF too large. Maximum size is 15 MB."}, status_code=400)
+    if len(content) < 1000:
+        return JSONResponse({"error": "PDF appears to be empty or corrupted."}, status_code=400)
+
+    b64 = base64.standard_b64encode(content).decode("utf-8")
+
+    extraction_prompt = """You are an expert CIBIL/credit bureau data extraction system for Indian lenders.
+Carefully read this credit report and extract every available data point.
+
+Return ONLY valid JSON — no explanation, no markdown, no preamble:
+{
+  "cibil_score": <integer 300-900, or null if not found>,
+  "credit_vintage_yrs": <float, age of oldest credit account in years, e.g. 6.5, default 0>,
+  "enquiries_6m": <integer, hard enquiries in last 6 months, default 0>,
+  "dpd_30_count": <integer, accounts with 30+ DPD in last 24 months, default 0>,
+  "dpd_60_count": <integer, accounts with 60+ DPD in last 24 months, default 0>,
+  "dpd_90_count": <integer, accounts with 90+ DPD in last 24 months, default 0>,
+  "writeoff_settled": <"yes" if any account shows written-off/settled/suit-filed status, else "no">,
+  "secured_unsecured_ratio": <one of: "Mostly secured (home/car loans)" | "Mix of secured and unsecured" | "Mostly unsecured (personal/credit card)" | "Only unsecured loans" | "First-time borrower">,
+  "existing_emi_total": <estimated total active monthly EMI obligations in rupees, default 0>,
+  "total_active_loans": <integer, number of active loan accounts>,
+  "total_credit_cards": <integer, number of active credit cards>,
+  "credit_limit_total": <total credit card limit in rupees, default 0>,
+  "overdue_amount": <total current overdue amount in rupees, default 0>,
+  "name_on_report": <full name as on report, or "">,
+  "pan_masked": <masked PAN if visible, or "">,
+  "report_date": <report generation date as string, or "">,
+  "extraction_notes": <string, max 150 chars, any important observations e.g. "3 active personal loans", "guarantor accounts present">
+}"""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1200,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": b64,
+                        }
+                    },
+                    {"type": "text", "text": extraction_prompt}
+                ]
+            }]
+        )
+        raw    = message.content[0].text.strip()
+        raw    = raw.replace("```json", "").replace("```", "").strip()
+        result = json.loads(raw)
+        logger.info(f"CIBIL parsed by {user['username']}: score={result.get('cibil_score')}")
+        return JSONResponse(content={"ok": True, "data": result})
+    except json.JSONDecodeError as e:
+        logger.error(f"CIBIL JSON parse error: {e}")
+        return JSONResponse({"error": "Could not extract structured data from this PDF. Ensure it is a valid CIBIL/bureau report."}, status_code=422)
+    except Exception as e:
+        logger.error(f"CIBIL parse exception: {e}")
+        return JSONResponse({"error": "PDF parsing failed. Please try again."}, status_code=500)
+
+# ── REST API — for LMS / MuleSoft integration ─────────────────────────────────
+@app.post("/api/v1/analyze")
+@limiter.limit("20/minute")
+async def api_analyze(request: Request, x_api_key: str = Header(default="")):
+    """Programmatic API for LMS integration. Accepts JSON body."""
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key header."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    # Map JSON body to same logic as form endpoint
+    required = ["full_name", "age", "employment_type", "monthly_income",
+                "monthly_expenses", "cibil_score", "loan_amount", "loan_tenure",
+                "loan_type", "loan_purpose"]
+    missing = [f for f in required if f not in body]
+    if missing:
+        return JSONResponse({"error": f"Missing required fields: {missing}"}, status_code=400)
+
+    # Delegate to core logic
+    result = _run_analysis(body, api_user)
+    return JSONResponse(content=result)
+
+# ── Core loan analysis (shared by form + API) ──────────────────────────────────
 @app.post("/analyze-loan")
 @limiter.limit("10/minute")
 def analyze_loan(
@@ -347,7 +651,7 @@ def analyze_loan(
     writeoff_settled:     str   = Form("no"),
     enquiries_6m:         int   = Form(0),
     credit_vintage_yrs:   float = Form(0),
-    secured_unsecured_ratio: str = Form(""),
+    secured_unsecured_ratio: str= Form(""),
     avg_monthly_balance:  float = Form(0),
     bounce_count_6m:      int   = Form(0),
     salary_credits_regular: str = Form("yes"),
@@ -358,18 +662,66 @@ def analyze_loan(
     loan_purpose:         str   = Form(...),
     collateral_value:     float = Form(0),
     business_vintage_yrs: float = Form(0),
+    cibil_pdf_parsed:     str   = Form("no"),
 ):
-    if not verify_session(session):
+    user = verify_session(session)
+    if not user:
         return JSONResponse({"error": "Session expired. Please log in again."}, status_code=401)
 
-    full_name     = full_name.strip()[:100]
-    loan_purpose  = loan_purpose.strip()[:300]
-    employer_name = employer_name.strip()[:100]
-    wo_bool       = writeoff_settled.lower() in ("yes", "true", "1", "on")
-    sal_reg_bool  = salary_credits_regular.lower() in ("yes", "true", "1", "on")
+    body = {
+        "full_name": full_name, "age": age, "employment_type": employment_type,
+        "employer_name": employer_name, "employer_vintage_yrs": employer_vintage_yrs,
+        "monthly_income": monthly_income, "monthly_expenses": monthly_expenses,
+        "itr_income": itr_income, "gst_turnover": gst_turnover,
+        "cibil_score": cibil_score, "dpd_30_count": dpd_30_count,
+        "dpd_60_count": dpd_60_count, "dpd_90_count": dpd_90_count,
+        "writeoff_settled": writeoff_settled, "enquiries_6m": enquiries_6m,
+        "credit_vintage_yrs": credit_vintage_yrs,
+        "secured_unsecured_ratio": secured_unsecured_ratio,
+        "avg_monthly_balance": avg_monthly_balance, "bounce_count_6m": bounce_count_6m,
+        "salary_credits_regular": salary_credits_regular,
+        "existing_emi_total": existing_emi_total, "loan_amount": loan_amount,
+        "loan_tenure": loan_tenure, "loan_type": loan_type,
+        "loan_purpose": loan_purpose, "collateral_value": collateral_value,
+        "business_vintage_yrs": business_vintage_yrs,
+        "cibil_pdf_parsed": cibil_pdf_parsed.lower() in ("yes","true","1"),
+    }
+    result = _run_analysis(body, user)
+    return JSONResponse(content=result)
+
+
+def _run_analysis(body: dict, user: dict) -> dict:
+    full_name     = str(body.get("full_name", "")).strip()[:100]
+    age           = int(body.get("age", 0))
+    employment_type = str(body.get("employment_type", ""))
+    employer_name = str(body.get("employer_name", "")).strip()[:100]
+    employer_vintage_yrs = float(body.get("employer_vintage_yrs", 0))
+    monthly_income = float(body.get("monthly_income", 0))
+    monthly_expenses = float(body.get("monthly_expenses", 0))
+    itr_income    = float(body.get("itr_income", 0))
+    gst_turnover  = float(body.get("gst_turnover", 0))
+    cibil_score   = int(body.get("cibil_score", 300))
+    dpd_30_count  = int(body.get("dpd_30_count", 0))
+    dpd_60_count  = int(body.get("dpd_60_count", 0))
+    dpd_90_count  = int(body.get("dpd_90_count", 0))
+    wo_bool       = str(body.get("writeoff_settled","no")).lower() in ("yes","true","1","on")
+    enquiries_6m  = int(body.get("enquiries_6m", 0))
+    credit_vintage_yrs = float(body.get("credit_vintage_yrs", 0))
+    secured_unsecured_ratio = str(body.get("secured_unsecured_ratio",""))
+    avg_monthly_balance = float(body.get("avg_monthly_balance", 0))
+    bounce_count_6m = int(body.get("bounce_count_6m", 0))
+    sal_reg_bool  = str(body.get("salary_credits_regular","yes")).lower() in ("yes","true","1","on")
+    existing_emi_total = float(body.get("existing_emi_total", 0))
+    loan_amount   = float(body.get("loan_amount", 0))
+    loan_tenure   = int(body.get("loan_tenure", 12))
+    loan_type     = str(body.get("loan_type", ""))
+    loan_purpose  = str(body.get("loan_purpose", "")).strip()[:300]
+    collateral_value = float(body.get("collateral_value", 0))
+    business_vintage_yrs = float(body.get("business_vintage_yrs", 0))
+    cibil_pdf_parsed = bool(body.get("cibil_pdf_parsed", False))
 
     if loan_type not in LOAN_RULES:
-        return JSONResponse({"error": "Invalid loan type."}, status_code=400)
+        return {"error": "Invalid loan type."}
 
     rules = LOAN_RULES[loan_type]
 
@@ -406,8 +758,9 @@ def analyze_loan(
     }
     policy_violations = run_policy_gate(gate_data, rules)
 
+    app_id = generate_app_id()
+
     if policy_violations:
-        app_id = generate_app_id()
         result = {
             "application_id": app_id, "decision": "REJECTED",
             "risk_level": "HIGH", "risk_score": 95,
@@ -425,19 +778,23 @@ def analyze_loan(
             "loan_type": loan_type, "applicant_name": full_name,
             "loan_amount": loan_amount, "emi_estimate": round(emi),
             "foir": foir, "ltv": ltv, "computed_rate": computed_rate,
+            "cibil_pdf_parsed": cibil_pdf_parsed,
         }
         _save(result, age, employment_type, employer_name, loan_tenure, cibil_score,
               monthly_income, itr_income, gst_turnover, dpd_30_count, dpd_60_count,
-              dpd_90_count, enquiries_6m, credit_vintage_yrs, avg_monthly_balance, bounce_count_6m, ltv)
-        return JSONResponse(content=result)
+              dpd_90_count, enquiries_6m, credit_vintage_yrs, avg_monthly_balance,
+              bounce_count_6m, ltv, user, cibil_pdf_parsed)
+        return result
 
-    # Full AI credit memo prompt
     btr = "N/A"
     if gst_turnover > 0 and avg_monthly_balance > 0:
         btr = f"{round((avg_monthly_balance * 12) / gst_turnover * 100, 1)}%"
 
+    bureau_source = "CIBIL report PDF (auto-extracted)" if cibil_pdf_parsed else "manually entered"
+
     prompt = f"""You are a Senior Credit Manager at a leading Indian NBFC with 15+ years experience.
 You follow RBI Master Directions and produce structured credit assessments like real banks do.
+Bureau data source: {bureau_source}
 
 LOAN: {loan_type} | Rate range: {rules['rate_range'][0]}%-{rules['rate_range'][1]}% | Risk-computed rate: {computed_rate}%
 Policy: Max FOIR {rules['max_foir']}% | Min CIBIL {rules['min_cibil'] if rules['min_cibil'] > 0 else 'N/A'} | Max LTV {max_ltv}% | Max Tenure {rules['max_tenure']}m | Priority Sector: {'YES' if rules['priority_sector'] else 'NO'}
@@ -454,7 +811,7 @@ INCOME & CASHFLOW:
 - Salary/credit regularity: {'Regular' if sal_reg_bool else 'IRREGULAR'}
 - Cheque/ECS bounces (6m): {bounce_count_6m} {'[CAUTION]' if bounce_count_6m > 1 else ''}
 
-BUREAU:
+BUREAU ({bureau_source}):
 - CIBIL: {cibil_score} | Credit vintage: {credit_vintage_yrs}y | Secured/unsecured mix: {secured_unsecured_ratio or 'N/A'}
 - DPD 30+: {dpd_30_count} | DPD 60+: {dpd_60_count} | DPD 90+: {dpd_90_count}
 - Write-off/settlement: {'YES' if wo_bool else 'None'} | Enquiries (6m): {enquiries_6m} {'[HIGH]' if enquiries_6m > 3 else ''}
@@ -497,26 +854,27 @@ Respond ONLY with this JSON (no other text):
         result = json.loads(raw)
     except json.JSONDecodeError as e:
         logger.error(f"JSON parse error: {e}")
-        return JSONResponse({"error": "AI response parsing failed. Retry."}, status_code=500)
+        return {"error": "AI response parsing failed. Retry."}
     except Exception as e:
         logger.error(f"Claude error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return {"error": str(e)}
 
-    app_id = generate_app_id()
     result.update({
         "application_id": app_id, "loan_type": loan_type,
         "applicant_name": full_name, "loan_amount": loan_amount,
         "emi_estimate": round(emi), "foir": foir,
         "ltv": ltv, "computed_rate": computed_rate, "policy_violations": [],
+        "cibil_pdf_parsed": cibil_pdf_parsed,
     })
     _save(result, age, employment_type, employer_name, loan_tenure, cibil_score,
           monthly_income, itr_income, gst_turnover, dpd_30_count, dpd_60_count,
-          dpd_90_count, enquiries_6m, credit_vintage_yrs, avg_monthly_balance, bounce_count_6m, ltv)
-    return JSONResponse(content=result)
+          dpd_90_count, enquiries_6m, credit_vintage_yrs, avg_monthly_balance,
+          bounce_count_6m, ltv, user, cibil_pdf_parsed)
+    return result
 
 
 def _save(result, age, emp, employer, tenure, cibil, income, itr, gst,
-          dpd30, dpd60, dpd90, enq, vintage, amb, bounce, ltv):
+          dpd30, dpd60, dpd90, enq, vintage, amb, bounce, ltv, user, cibil_pdf_parsed):
     if not DATABASE_URL:
         return
     try:
@@ -532,7 +890,8 @@ def _save(result, age, emp, employer, tenure, cibil, income, itr, gst,
                 approved_amount, interest_rate, foir, ltv, emi_estimate,
                 fraud_flags, regulatory_flags, strengths, concerns,
                 documentation_required, reason, recommendation,
-                counter_offer, bureau_assessment, cashflow_assessment
+                counter_offer, bureau_assessment, cashflow_assessment,
+                created_by, bank_name, cibil_pdf_parsed
             ) VALUES (
                 :app_id, :name, :age, :emp, :employer,
                 :lt, :la, :tenure, :cibil,
@@ -542,7 +901,8 @@ def _save(result, age, emp, employer, tenure, cibil, income, itr, gst,
                 :decision, :pviol, :risk, :score,
                 :approved, :rate, :foir, :ltv, :emi,
                 :fraud, :reg, :strengths, :concerns,
-                :docs, :reason, :rec, :counter, :bureau, :cashflow
+                :docs, :reason, :rec, :counter, :bureau, :cashflow,
+                :created_by, :bank_name, :cpdf
             )
         """,
             app_id=result["application_id"], name=result["applicant_name"],
@@ -566,17 +926,31 @@ def _save(result, age, emp, employer, tenure, cibil, income, itr, gst,
             reason=result.get("reason"), rec=result.get("recommendation"),
             counter=result.get("counter_offer"),
             bureau=result.get("bureau_assessment"),
-            cashflow=result.get("cashflow_assessment")
+            cashflow=result.get("cashflow_assessment"),
+            created_by=user.get("username", "api"),
+            bank_name=user.get("bank_name", ""),
+            cpdf=cibil_pdf_parsed,
         )
         conn.close()
-        logger.info(f"✅ Saved {result['application_id']}")
+        logger.info(f"✅ Saved {result['application_id']} by {user.get('username')}")
     except Exception as e:
         logger.error(f"❌ DB save: {e}")
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "NBFC AI Platform v3.0", "loan_types": len(LOAN_RULES)}
+    db_ok = False
+    if DATABASE_URL:
+        try:
+            conn = get_db_conn(); conn.run("SELECT 1"); conn.close(); db_ok = True
+        except Exception: pass
+    return {
+        "status": "ok",
+        "service": "NBFC AI Platform v4.0",
+        "loan_types": len(LOAN_RULES),
+        "database": "connected" if db_ok else "not connected",
+        "features": ["CIBIL PDF parsing", "Multi-user", "Multi-bank", "REST API", "Risk-based pricing"]
+    }
 
 if __name__ == "__main__":
     import uvicorn
