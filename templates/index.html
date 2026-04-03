@@ -30,6 +30,7 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 .nav-link:hover{background:rgba(255,255,255,.1);color:white;}
 .nav-link.active{background:rgba(200,151,46,.2);color:#e8b84b;}
 .nav-user{font-size:12px;color:rgba(255,255,255,.5);padding:0 10px;border-right:1px solid rgba(255,255,255,.15);margin-right:4px;}
+.nav-bank{font-size:11px;background:rgba(200,151,46,.15);color:#e8b84b;border:1px solid rgba(200,151,46,.3);border-radius:5px;padding:2px 8px;margin-right:6px;}
 
 /* LOAN TYPE TABS */
 .loan-tabs{background:white;border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;}
@@ -53,6 +54,7 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 .section-icon.orange{background:rgba(193,127,36,.12);color:var(--warning);}
 .section-icon.red{background:rgba(192,57,43,.12);color:var(--danger);}
 .section-icon.gold{background:rgba(200,151,46,.12);color:var(--gold);}
+.section-icon.purple{background:rgba(109,40,217,.12);color:#7c3aed;}
 .section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--primary);}
 .section-subtitle{font-size:11px;color:var(--muted);margin-left:auto;}
 .section-body{padding:18px 20px;}
@@ -67,11 +69,14 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 .field input,.field select,.field textarea{
   width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;
   font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:#fafaf8;
-  outline:none;transition:border-color .2s,box-shadow .2s;
+  outline:none;transition:border-color .2s,box-shadow .2s,background .2s;
 }
 .field input:focus,.field select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(14,79,53,.08);background:white;}
+/* Auto-filled fields highlight */
+.field input.auto-filled{border-color:#7c3aed;background:#faf5ff;box-shadow:0 0 0 3px rgba(124,58,237,.08);}
 .field .hint{font-size:11px;color:var(--muted);margin-top:4px;}
 .field .hint.warn{color:var(--warning);}
+.auto-tag{display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#7c3aed;background:#ede9fe;border-radius:4px;padding:1px 5px;margin-left:5px;}
 
 /* TOGGLE PAIR */
 .toggle-pair{display:flex;gap:0;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;}
@@ -83,6 +88,46 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 .product-hint{background:rgba(200,151,46,.08);border:1px solid rgba(200,151,46,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#7a5c1a;line-height:1.6;display:none;}
 .product-hint.visible{display:block;}
 .product-hint strong{color:var(--primary);}
+
+/* ── CIBIL PDF UPLOAD SECTION ─────────────────────────────────────────────── */
+.cibil-upload-area{
+  border:2px dashed rgba(124,58,237,.3);border-radius:10px;
+  padding:20px;text-align:center;cursor:pointer;
+  transition:border-color .2s,background .2s;background:#fdfcff;
+  position:relative;
+}
+.cibil-upload-area:hover,.cibil-upload-area.drag-over{
+  border-color:#7c3aed;background:#f5f3ff;
+}
+.cibil-upload-area input[type=file]{
+  position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;
+}
+.cibil-upload-icon{font-size:32px;margin-bottom:8px;}
+.cibil-upload-title{font-size:13px;font-weight:600;color:#4c1d95;margin-bottom:3px;}
+.cibil-upload-sub{font-size:11px;color:var(--muted);}
+
+.cibil-parsing{display:none;text-align:center;padding:16px;}
+.cibil-parsing .cibil-spinner{width:28px;height:28px;border:3px solid #ede9fe;border-top-color:#7c3aed;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px;}
+.cibil-parsing p{font-size:12px;color:#7c3aed;font-weight:500;}
+
+.cibil-result{display:none;background:#f5f3ff;border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:14px;}
+.cibil-result-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.cibil-result-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:#7c3aed;color:white;border-radius:6px;
+  padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:0.3px;
+}
+.cibil-score-big{font-family:'DM Serif Display',serif;font-size:32px;color:#4c1d95;font-weight:400;}
+.cibil-score-lbl{font-size:10px;color:#7c3aed;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+.cibil-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.cibil-chip{font-size:11px;padding:3px 9px;border-radius:5px;font-weight:600;}
+.cibil-chip.ok{background:#d1fae5;color:#065f46;}
+.cibil-chip.warn{background:#fef3c7;color:#92400e;}
+.cibil-chip.bad{background:#fee2e2;color:#991b1b;}
+.cibil-notes{font-size:11px;color:#6d28d9;margin-top:8px;font-style:italic;}
+.cibil-clear{float:right;font-size:11px;color:#7c3aed;cursor:pointer;text-decoration:underline;border:none;background:none;font-family:'DM Sans',sans-serif;}
+
+.cibil-error{display:none;background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:12px;color:#991b1b;}
 
 /* SUBMIT BTN */
 .submit-btn{
@@ -114,6 +159,7 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 .dh-metric{text-align:center;}
 .dh-metric .val{font-size:18px;font-weight:700;color:white;font-family:'DM Serif Display',serif;}
 .dh-metric .lbl{font-size:10px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:0.5px;}
+.dh-cibil-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(124,58,237,.25);border:1px solid rgba(200,180,255,.4);border-radius:5px;padding:2px 8px;font-size:10px;color:#e9d5ff;font-weight:600;margin-left:8px;vertical-align:middle;}
 
 /* RESULT SECTIONS */
 .res-card{background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;}
@@ -170,9 +216,11 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
     <span class="nav-title">NBFC <span>AI</span></span>
   </a>
   <div class="nav-right">
+    {% if bank_name %}<span class="nav-bank">🏛 {{ bank_name }}</span>{% endif %}
     <span class="nav-user">{{ username }}</span>
     <a class="nav-link active" href="/">Analysis</a>
     <a class="nav-link" href="/dashboard">Dashboard</a>
+    {% if role == 'admin' %}<a class="nav-link" href="/admin/users">Users</a>{% endif %}
     <form method="post" action="/logout" style="display:inline">
       <button class="nav-link" type="submit">Sign Out</button>
     </form>
@@ -199,6 +247,7 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 <div>
 <form id="loanForm">
 <input type="hidden" name="loan_type" id="loanTypeInput" value="Personal Loan"/>
+<input type="hidden" name="cibil_pdf_parsed" id="cibilPdfParsedInput" value="no"/>
 
 <!-- Product hint -->
 <div class="product-hint" id="productHint"></div>
@@ -214,16 +263,16 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
     <div class="fields cols2">
       <div class="field">
         <label>Full Name <span class="req">*</span></label>
-        <input type="text" name="full_name" placeholder="e.g. Rajesh Kumar" required/>
+        <input type="text" name="full_name" id="f_full_name" placeholder="e.g. Rajesh Kumar" required/>
       </div>
       <div class="field">
         <label>Age <span class="req">*</span></label>
-        <input type="number" name="age" placeholder="e.g. 34" min="21" max="65" required/>
+        <input type="number" name="age" id="f_age" placeholder="e.g. 34" min="21" max="65" required/>
         <div class="hint">21–65 years</div>
       </div>
       <div class="field">
         <label>Employment Type <span class="req">*</span></label>
-        <select name="employment_type" required>
+        <select name="employment_type" id="f_employment_type" required>
           <option value="">Select type</option>
           <option>Salaried — Private Sector</option>
           <option>Salaried — Government / PSU</option>
@@ -272,8 +321,8 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
         <input type="number" name="monthly_expenses" placeholder="e.g. 25000" min="0" required/>
       </div>
       <div class="field">
-        <label>Existing EMI Obligations (₹/month)</label>
-        <input type="number" name="existing_emi_total" placeholder="e.g. 12000" min="0" value="0"/>
+        <label>Existing EMI Obligations (₹/month) <span id="emiAutoTag"></span></label>
+        <input type="number" name="existing_emi_total" id="f_existing_emi_total" placeholder="e.g. 12000" min="0" value="0"/>
         <div class="hint">All active loan EMIs combined</div>
       </div>
       <div class="field" id="itrField">
@@ -308,47 +357,97 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
   </div>
 </div>
 
-<!-- S3: Bureau Profile -->
+<!-- ── CIBIL PDF UPLOAD ─────────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon purple">📄</div>
+    <span class="section-title">CIBIL Report Upload</span>
+    <span class="section-subtitle">AI auto-extracts all bureau data</span>
+  </div>
+  <div class="section-body">
+    <!-- Upload area (hidden after parse) -->
+    <div id="cibilUploadArea" class="cibil-upload-area" ondragover="handleDrag(event,true)" ondragleave="handleDrag(event,false)" ondrop="handleDrop(event)">
+      <input type="file" id="cibilFileInput" accept=".pdf" onchange="uploadCibil(this.files[0])"/>
+      <div class="cibil-upload-icon">📋</div>
+      <div class="cibil-upload-title">Drop CIBIL PDF here or click to upload</div>
+      <div class="cibil-upload-sub">Supports CIBIL, Experian, CRIF, Equifax reports &middot; Max 15 MB</div>
+    </div>
+
+    <!-- Parsing spinner -->
+    <div id="cibilParsing" class="cibil-parsing">
+      <div class="cibil-spinner"></div>
+      <p>Reading CIBIL report with AI…</p>
+    </div>
+
+    <!-- Success result -->
+    <div id="cibilResult" class="cibil-result">
+      <div class="cibil-result-header">
+        <div>
+          <div class="cibil-score-big" id="cibilScoreDisplay">—</div>
+          <div class="cibil-score-lbl">CIBIL Score (auto-extracted)</div>
+        </div>
+        <div style="margin-left:auto;text-align:right;">
+          <div class="cibil-result-badge">✅ Bureau Auto-Filled</div>
+          <button type="button" class="cibil-clear" onclick="clearCibil()" style="margin-top:6px;display:block;">✕ Clear &amp; re-upload</button>
+        </div>
+      </div>
+      <div class="cibil-chips" id="cibilChips"></div>
+      <div class="cibil-notes" id="cibilNotes"></div>
+    </div>
+
+    <!-- Error -->
+    <div id="cibilError" class="cibil-error">
+      ⚠️ <span id="cibilErrorMsg"></span>
+      <button type="button" style="margin-left:8px;font-size:11px;color:#991b1b;background:none;border:none;cursor:pointer;text-decoration:underline;" onclick="clearCibil()">Try again</button>
+    </div>
+
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);">
+      📌 If you don't have the PDF, fill bureau fields manually below.
+    </div>
+  </div>
+</div>
+
+<!-- S3: Bureau Profile (now auto-fillable) -->
 <div class="section">
   <div class="section-head">
     <div class="section-icon orange">📊</div>
     <span class="section-title">Bureau Profile</span>
-    <span class="section-subtitle">CIBIL / Experian / CRIF signals</span>
+    <span class="section-subtitle" id="bureauSubtitle">CIBIL / Experian / CRIF signals</span>
   </div>
   <div class="section-body">
     <div class="fields cols3">
       <div class="field">
-        <label>CIBIL Score <span class="req">*</span></label>
-        <input type="number" name="cibil_score" placeholder="e.g. 740" min="300" max="900" required/>
+        <label>CIBIL Score <span class="req">*</span><span id="tag_cibil_score"></span></label>
+        <input type="number" name="cibil_score" id="f_cibil_score" placeholder="e.g. 740" min="300" max="900" required/>
       </div>
       <div class="field">
-        <label>Credit Vintage (years)</label>
-        <input type="number" name="credit_vintage_yrs" placeholder="e.g. 6" min="0" step="0.5" value="0"/>
+        <label>Credit Vintage (years)<span id="tag_credit_vintage"></span></label>
+        <input type="number" name="credit_vintage_yrs" id="f_credit_vintage_yrs" placeholder="e.g. 6" min="0" step="0.5" value="0"/>
         <div class="hint">Age of oldest credit account</div>
       </div>
       <div class="field">
-        <label>Credit Enquiries (last 6m)</label>
-        <input type="number" name="enquiries_6m" placeholder="e.g. 1" min="0" value="0"/>
+        <label>Credit Enquiries (last 6m)<span id="tag_enquiries"></span></label>
+        <input type="number" name="enquiries_6m" id="f_enquiries_6m" placeholder="e.g. 1" min="0" value="0"/>
         <div class="hint warn">6+ = credit hungry flag</div>
       </div>
       <div class="field">
-        <label>DPD 30+ (last 24 months)</label>
-        <input type="number" name="dpd_30_count" placeholder="0" min="0" value="0"/>
+        <label>DPD 30+ (last 24 months)<span id="tag_dpd30"></span></label>
+        <input type="number" name="dpd_30_count" id="f_dpd_30_count" placeholder="0" min="0" value="0"/>
         <div class="hint">Instances of 30+ days past due</div>
       </div>
       <div class="field">
-        <label>DPD 60+ (last 24 months)</label>
-        <input type="number" name="dpd_60_count" placeholder="0" min="0" value="0"/>
+        <label>DPD 60+ (last 24 months)<span id="tag_dpd60"></span></label>
+        <input type="number" name="dpd_60_count" id="f_dpd_60_count" placeholder="0" min="0" value="0"/>
       </div>
       <div class="field">
-        <label>DPD 90+ (last 24 months)</label>
-        <input type="number" name="dpd_90_count" placeholder="0" min="0" value="0"/>
+        <label>DPD 90+ (last 24 months)<span id="tag_dpd90"></span></label>
+        <input type="number" name="dpd_90_count" id="f_dpd_90_count" placeholder="0" min="0" value="0"/>
         <div class="hint warn">Any 90+ DPD = auto reject</div>
       </div>
     </div>
     <div class="fields cols2" style="margin-top:14px">
       <div class="field">
-        <label>Write-off / Settlement on Bureau</label>
+        <label>Write-off / Settlement on Bureau<span id="tag_writeoff"></span></label>
         <div class="toggle-pair">
           <input type="radio" name="writeoff_settled" id="wo_no" value="no" checked/>
           <label for="wo_no">✅ None</label>
@@ -358,8 +457,8 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
         <div class="hint warn">Write-off = hard reject</div>
       </div>
       <div class="field">
-        <label>Secured / Unsecured Loan Mix</label>
-        <select name="secured_unsecured_ratio">
+        <label>Secured / Unsecured Loan Mix<span id="tag_mix"></span></label>
+        <select name="secured_unsecured_ratio" id="f_secured_unsecured_ratio">
           <option value="">Not provided</option>
           <option value="Mostly secured (home/car loans)">Mostly secured (home/car)</option>
           <option value="Mix of secured and unsecured">Mix of both</option>
@@ -459,7 +558,7 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
       <div class="dh-metrics" id="dhMetrics"></div>
     </div>
 
-    <!-- Policy violations (shown only if triggered) -->
+    <!-- Policy violations -->
     <div class="res-card" id="policyCard" style="display:none">
       <div class="res-card-head">🚫 Policy Violations — Auto Rejected</div>
       <div class="res-card-body">
@@ -503,7 +602,7 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
       </div>
     </div>
 
-    <!-- Counter offer (if rejected) -->
+    <!-- Counter offer -->
     <div class="res-card" id="counterCard" style="display:none">
       <div class="res-card-head">💡 Counter Offer</div>
       <div class="res-card-body">
@@ -580,7 +679,6 @@ function setLoanType(el) {
   const lt = el.dataset.lt;
   document.getElementById('loanTypeInput').value = lt;
 
-  // Hint
   const hint = document.getElementById('productHint');
   const spacer = document.getElementById('hintSpacer');
   if (PRODUCT_HINTS[lt]) {
@@ -592,7 +690,6 @@ function setLoanType(el) {
     spacer.style.display = 'none';
   }
 
-  // Collateral field
   const cf = document.getElementById('collateralField');
   if (COLLATERAL_REQUIRED.includes(lt)) {
     cf.style.display = '';
@@ -601,12 +698,10 @@ function setLoanType(el) {
     cf.style.display = 'none';
   }
 
-  // GST field
   document.getElementById('gstField').style.display =
     (lt === 'Business Loan' || lt === 'Loan Against Property') ? '' : 'none';
 }
 
-// Show/hide business vintage based on employment type
 document.querySelector('[name=employment_type]').addEventListener('change', function() {
   const lt = document.getElementById('loanTypeInput').value;
   const isBiz = BIZ_TYPES.includes(this.value) || lt === 'Business Loan';
@@ -614,15 +709,176 @@ document.querySelector('[name=employment_type]').addEventListener('change', func
   document.getElementById('gstField').style.display = (isBiz || lt === 'Loan Against Property') ? '' : 'none';
 });
 
-// Init
 setLoanType(document.querySelector('.tab.active'));
 
-// FORM SUBMIT
+// ── CIBIL PDF UPLOAD ──────────────────────────────────────────────────────────
+function handleDrag(e, over) {
+  e.preventDefault();
+  document.getElementById('cibilUploadArea').classList.toggle('drag-over', over);
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('cibilUploadArea').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadCibil(file);
+}
+
+async function uploadCibil(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showCibilError('Only PDF files are supported.');
+    return;
+  }
+  if (file.size > 15 * 1024 * 1024) {
+    showCibilError('File too large. Maximum size is 15 MB.');
+    return;
+  }
+
+  document.getElementById('cibilUploadArea').style.display  = 'none';
+  document.getElementById('cibilResult').style.display      = 'none';
+  document.getElementById('cibilError').style.display       = 'none';
+  document.getElementById('cibilParsing').style.display     = 'block';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const res  = await fetch('/parse-cibil', { method: 'POST', body: fd });
+    const json = await res.json();
+
+    document.getElementById('cibilParsing').style.display = 'none';
+
+    if (!res.ok || json.error) {
+      showCibilError(json.error || 'Parsing failed. Please try again.');
+      return;
+    }
+
+    autofillBureau(json.data);
+  } catch(err) {
+    document.getElementById('cibilParsing').style.display = 'none';
+    showCibilError('Network error. Please try again.');
+  }
+}
+
+function autofillBureau(d) {
+  // Fill hidden flag
+  document.getElementById('cibilPdfParsedInput').value = 'yes';
+
+  // Fill bureau fields
+  const map = {
+    'f_cibil_score':             d.cibil_score,
+    'f_credit_vintage_yrs':      d.credit_vintage_yrs,
+    'f_enquiries_6m':            d.enquiries_6m,
+    'f_dpd_30_count':            d.dpd_30_count,
+    'f_dpd_60_count':            d.dpd_60_count,
+    'f_dpd_90_count':            d.dpd_90_count,
+    'f_existing_emi_total':      d.existing_emi_total,
+  };
+  const tagMap = {
+    'tag_cibil_score': 'f_cibil_score',
+    'tag_credit_vintage': 'f_credit_vintage_yrs',
+    'tag_enquiries': 'f_enquiries_6m',
+    'tag_dpd30': 'f_dpd_30_count',
+    'tag_dpd60': 'f_dpd_60_count',
+    'tag_dpd90': 'f_dpd_90_count',
+  };
+
+  Object.entries(map).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el && val !== null && val !== undefined) {
+      el.value = val;
+      el.classList.add('auto-filled');
+    }
+  });
+
+  // Show auto tags
+  Object.entries(tagMap).forEach(([tagId, fieldId]) => {
+    const el = document.getElementById(tagId);
+    const field = document.getElementById(fieldId);
+    if (el && field && field.classList.contains('auto-filled')) {
+      el.innerHTML = '<span class="auto-tag">AUTO</span>';
+    }
+  });
+
+  if (d.existing_emi_total > 0) {
+    document.getElementById('emiAutoTag').innerHTML = '<span class="auto-tag">AUTO</span>';
+  }
+
+  // Write-off toggle
+  if (d.writeoff_settled === 'yes') {
+    document.getElementById('wo_yes').checked = true;
+  } else {
+    document.getElementById('wo_no').checked = true;
+  }
+
+  // Secured/unsecured select
+  const mixSel = document.getElementById('f_secured_unsecured_ratio');
+  if (d.secured_unsecured_ratio && mixSel) {
+    for (let opt of mixSel.options) {
+      if (opt.value === d.secured_unsecured_ratio) { opt.selected = true; break; }
+    }
+    document.getElementById('tag_mix').innerHTML = '<span class="auto-tag">AUTO</span>';
+  }
+
+  // Show result card
+  const score = d.cibil_score;
+  document.getElementById('cibilScoreDisplay').textContent = score || '—';
+
+  const chips = [];
+  if (score >= 750) chips.push({text: `CIBIL ${score} — Excellent`, cls:'ok'});
+  else if (score >= 700) chips.push({text: `CIBIL ${score} — Good`, cls:'ok'});
+  else if (score >= 650) chips.push({text: `CIBIL ${score} — Fair`, cls:'warn'});
+  else chips.push({text: `CIBIL ${score} — Poor`, cls:'bad'});
+
+  if (d.dpd_90_count > 0) chips.push({text:`${d.dpd_90_count}x DPD 90+`, cls:'bad'});
+  else if (d.dpd_30_count > 0) chips.push({text:`${d.dpd_30_count}x DPD 30+`, cls:'warn'});
+  else chips.push({text:'Clean DPD', cls:'ok'});
+
+  if (d.writeoff_settled === 'yes') chips.push({text:'Write-off/Settled', cls:'bad'});
+  if (d.enquiries_6m > 6) chips.push({text:`${d.enquiries_6m} enquiries (High)`, cls:'bad'});
+  else if (d.enquiries_6m > 3) chips.push({text:`${d.enquiries_6m} enquiries`, cls:'warn'});
+  else chips.push({text:`${d.enquiries_6m} enquiries`, cls:'ok'});
+
+  if (d.total_active_loans) chips.push({text:`${d.total_active_loans} active loans`, cls:'ok'});
+  if (d.credit_vintage_yrs >= 5) chips.push({text:`${d.credit_vintage_yrs}yr vintage`, cls:'ok'});
+
+  document.getElementById('cibilChips').innerHTML =
+    chips.map(c => `<span class="cibil-chip ${c.cls}">${c.text}</span>`).join('');
+
+  if (d.extraction_notes) {
+    document.getElementById('cibilNotes').textContent = '📝 ' + d.extraction_notes;
+  }
+
+  document.getElementById('cibilResult').style.display = 'block';
+  document.getElementById('bureauSubtitle').textContent = '✅ Auto-filled from CIBIL PDF';
+}
+
+function showCibilError(msg) {
+  document.getElementById('cibilUploadArea').style.display = '';
+  document.getElementById('cibilError').style.display = 'block';
+  document.getElementById('cibilErrorMsg').textContent = msg;
+}
+
+function clearCibil() {
+  document.getElementById('cibilPdfParsedInput').value = 'no';
+  document.getElementById('cibilUploadArea').style.display = '';
+  document.getElementById('cibilResult').style.display = 'none';
+  document.getElementById('cibilError').style.display = 'none';
+  document.getElementById('cibilFileInput').value = '';
+  document.getElementById('bureauSubtitle').textContent = 'CIBIL / Experian / CRIF signals';
+
+  // Remove auto-fill highlights
+  document.querySelectorAll('.auto-filled').forEach(el => el.classList.remove('auto-filled'));
+  document.querySelectorAll('.auto-tag').forEach(el => el.remove());
+  document.getElementById('emiAutoTag').innerHTML = '';
+}
+
+// ── FORM SUBMIT ────────────────────────────────────────────────────────────────
 document.getElementById('loanForm').addEventListener('submit', async function(e) {
   e.preventDefault();
-  const btn = document.getElementById('submitBtn');
+  const btn    = document.getElementById('submitBtn');
   const loader = document.getElementById('loader');
-  const panel = document.getElementById('resultPanel');
+  const panel  = document.getElementById('resultPanel');
 
   btn.disabled = true;
   btn.innerHTML = '⏳ Analyzing…';
@@ -630,9 +886,9 @@ document.getElementById('loanForm').addEventListener('submit', async function(e)
   panel.classList.remove('visible');
 
   try {
-    const fd = new FormData(this);
+    const fd  = new FormData(this);
     const res = await fetch('/analyze-loan', { method:'POST', body: fd });
-    const data = await res.json();
+    const data= await res.json();
     renderResult(data);
     panel.classList.add('visible');
     panel.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -650,15 +906,15 @@ function fmt(n) { return '₹' + Number(n).toLocaleString('en-IN'); }
 function renderResult(d) {
   const dec = d.decision || 'REJECTED';
 
-  // Decision header
   const hdr = document.getElementById('decisionHeader');
   hdr.className = 'decision-header ' + dec;
   const icons = { APPROVED:'✅', REJECTED:'❌', CONDITIONAL:'⚠️' };
-  document.getElementById('dhBadge').textContent = icons[dec] + '  ' + dec;
+  document.getElementById('dhBadge').innerHTML =
+    icons[dec] + '  ' + dec +
+    (d.cibil_pdf_parsed ? ' <span class="dh-cibil-badge">📄 CIBIL PDF</span>' : '');
   document.getElementById('dhAppId').textContent = d.application_id || '';
   document.getElementById('dhName').textContent = (d.applicant_name || '') + ' — ' + (d.loan_type || '');
 
-  // Header metrics
   const metrics = [
     { val: fmt(d.approved_amount || 0), lbl: 'Approved Amount' },
     { val: (d.recommended_interest_rate || d.computed_rate || '—') + '%', lbl: 'Interest Rate' },
@@ -670,19 +926,15 @@ function renderResult(d) {
     `<div class="dh-metric"><div class="val">${m.val}</div><div class="lbl">${m.lbl}</div></div>`
   ).join('');
 
-  // Policy violations
   const pvCard = document.getElementById('policyCard');
-  const pvList = document.getElementById('policyList');
   if (d.policy_violations && d.policy_violations.length > 0) {
     pvCard.style.display = '';
-    pvList.innerHTML = d.policy_violations.map(v => `<li>${v}</li>`).join('');
+    document.getElementById('policyList').innerHTML = d.policy_violations.map(v => `<li>${v}</li>`).join('');
   } else {
     pvCard.style.display = 'none';
   }
 
-  // Metrics row
   const fClr = (d.foir || 0) > 55 ? 'danger' : (d.foir || 0) > 45 ? 'warn' : 'success';
-  const cClr = (d.cibil_score || 0) < 650 ? 'danger' : (d.cibil_score || 0) < 700 ? 'warn' : 'success';
   document.getElementById('metricsRow').innerHTML = [
     { val: (d.foir||0)+'%', lbl:'FOIR', cls:fClr },
     { val: d.ltv ? d.ltv+'%' : 'N/A', lbl:'LTV', cls:''},
@@ -692,28 +944,22 @@ function renderResult(d) {
     { val: (d.computed_rate||0)+'%', lbl:'Risk-Computed Rate', cls:''},
   ].map(m => `<div class="metric-box ${m.cls}"><div class="mv">${m.val}</div><div class="ml">${m.lbl}</div></div>`).join('');
 
-  // Bureau & cashflow
   document.getElementById('bureauText').textContent = d.bureau_assessment || '—';
   document.getElementById('cashflowText').textContent = d.cashflow_assessment || '—';
-
-  // Reason & recommendation
   document.getElementById('reasonText').textContent = d.reason || '';
   document.getElementById('recommendText').textContent = '→ ' + (d.recommendation || '');
 
-  // Counter offer
   const cc = document.getElementById('counterCard');
   if (d.counter_offer) {
     cc.style.display = '';
     document.getElementById('counterText').textContent = d.counter_offer;
   } else { cc.style.display = 'none'; }
 
-  // Strengths & concerns
   document.getElementById('strengthsList').innerHTML =
     (d.strengths||[]).map(s=>`<li><span class="dot"></span>${s}</li>`).join('');
   document.getElementById('concernsList').innerHTML =
     (d.concerns||[]).map(c=>`<li><span class="dot"></span>${c}</li>`).join('');
 
-  // Flags
   const allFlags = [...(d.fraud_flags||[]).map(f=>'🔴 Fraud: '+f), ...(d.regulatory_flags||[]).map(f=>'🟡 Regulatory: '+f)];
   const fc = document.getElementById('flagsCard');
   if (allFlags.length > 0) {
@@ -722,7 +968,6 @@ function renderResult(d) {
       `<ul class="item-list flags">${allFlags.map(f=>`<li><span class="dot"></span>${f}</li>`).join('')}</ul>`;
   } else { fc.style.display = 'none'; }
 
-  // Docs
   document.getElementById('docsList').innerHTML =
     (d.documentation_required||[]).map(doc=>`<li><span class="dot"></span>${doc}</li>`).join('');
 }
