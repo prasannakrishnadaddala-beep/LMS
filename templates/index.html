@@ -1055,6 +1055,32 @@ function autofillBureau(d) {
     document.getElementById('tag_mix').innerHTML = '<span class="auto-tag">AUTO</span>';
   }
 
+  // ── Employment autofill from CIBIL ──────────────────────────────────────
+  if (d.employer_name) {
+    const empNameField = document.querySelector('[name=employer_name]');
+    if (empNameField && !empNameField.value.trim()) {
+      empNameField.value = d.employer_name;
+      empNameField.classList.add('auto-filled');
+    }
+  }
+  if (d.employment_type) {
+    const empTypeField = document.getElementById('f_employment_type');
+    if (empTypeField) {
+      for (let opt of empTypeField.options) {
+        if (opt.value === d.employment_type) { opt.selected = true; break; }
+      }
+      empTypeField.classList.add('auto-filled');
+    }
+  }
+  // Monthly income from CIBIL if bank statement hasn't filled it
+  if (d.monthly_income > 0) {
+    const incomeField = document.querySelector('[name=monthly_income]');
+    if (incomeField && !incomeField.value) {
+      incomeField.value = Math.round(d.monthly_income);
+      incomeField.classList.add('auto-filled');
+    }
+  }
+
   // Store extracted name for cross-check with bank statement
   window._cibilExtractedName = (d.full_name || '').trim().toLowerCase();
 
@@ -1265,6 +1291,19 @@ function autofillBankStmt(d) {
     if (incomeField && !incomeField.value) {
       incomeField.value = Math.round(d.salary_amount);
       incomeField.classList.add('auto-filled');
+    }
+  }
+  // Expenses autofill from avg monthly debit (proxy for total outflows)
+  if (d.avg_monthly_debit > 0) {
+    const expField = document.querySelector('[name=monthly_expenses]');
+    if (expField && !expField.value) {
+      // Use avg_monthly_debit minus detected EMIs as living expenses estimate
+      const emiDebits = d.emi_debits_detected || 0;
+      const estimatedExpenses = Math.max(0, Math.round(d.avg_monthly_debit - emiDebits));
+      if (estimatedExpenses > 0) {
+        expField.value = estimatedExpenses;
+        expField.classList.add('auto-filled');
+      }
     }
   }
   if (d.salary_credit_regular === false) {
