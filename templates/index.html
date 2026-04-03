@@ -129,6 +129,55 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
 
 .cibil-error{display:none;background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:12px;color:#991b1b;}
 
+/* Password prompt — shown after file is selected, before parse */
+.pdf-pending{
+  display:none;background:#faf5ff;border:2px solid rgba(124,58,237,.35);
+  border-radius:10px;padding:16px;
+}
+.pdf-pending.visible{display:block;}
+.pdf-pending-name{font-size:12px;font-weight:600;color:#4c1d95;margin-bottom:10px;display:flex;align-items:center;gap:7px;}
+.pdf-pw-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+.pdf-pw-row input[type=text]{
+  flex:1;padding:8px 11px;border:1.5px solid rgba(124,58,237,.4);border-radius:7px;
+  font-size:13px;font-family:'DM Sans',sans-serif;color:#1a1a1a;background:#fdfcff;outline:none;
+  transition:border-color .2s;
+}
+.pdf-pw-row input[type=text]:focus{border-color:#7c3aed;}
+.pdf-pw-parse-btn{
+  padding:8px 16px;background:#7c3aed;color:white;border:none;border-radius:7px;
+  font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;
+  white-space:nowrap;transition:background .15s;
+}
+.pdf-pw-parse-btn:hover{background:#6d28d9;}
+.pdf-pw-hint{font-size:10px;color:#7c3aed;margin-top:2px;}
+.pdf-pw-cancel{font-size:11px;color:#7c3aed;background:none;border:none;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif;padding:0;}
+
+/* Blue variant for bank statement password prompt */
+.bs-pdf-pending{
+  display:none;background:#eff6ff;border:2px solid rgba(21,101,192,.35);
+  border-radius:10px;padding:16px;
+}
+.bs-pdf-pending.visible{display:block;}
+.bs-pdf-pending-name{font-size:12px;font-weight:600;color:#1e40af;margin-bottom:10px;display:flex;align-items:center;gap:7px;}
+.bs-pdf-pw-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+.bs-pdf-pw-row input[type=text]{
+  flex:1;padding:8px 11px;border:1.5px solid rgba(21,101,192,.4);border-radius:7px;
+  font-size:13px;font-family:'DM Sans',sans-serif;color:#1a1a1a;background:#fafcff;outline:none;
+  transition:border-color .2s;
+}
+.bs-pdf-pw-row input[type=text]:focus{border-color:#1565c0;}
+.bs-pdf-pw-parse-btn{
+  padding:8px 16px;background:#1565c0;color:white;border:none;border-radius:7px;
+  font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;
+  white-space:nowrap;transition:background .15s;
+}
+.bs-pdf-pw-parse-btn:hover{background:#0d47a1;}
+.bs-pdf-pw-hint{font-size:10px;color:#1565c0;margin-top:2px;}
+.bs-pdf-pw-cancel{font-size:11px;color:#1565c0;background:none;border:none;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif;padding:0;}
+
+/* Name mismatch warning */
+.name-mismatch-warn{display:none;background:#fff8f0;border:1.5px solid #f59e0b;border-radius:8px;padding:10px 13px;font-size:12px;color:#92400e;margin-top:10px;}
+
 /* ── BANK STATEMENT UPLOAD SECTION ─────────────────────────────────────────── */
 .bs-upload-area{
   border:2px dashed rgba(21,101,192,.3);border-radius:10px;
@@ -303,11 +352,11 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
   <div class="section-body">
     <div class="fields cols2">
       <div class="field">
-        <label>Full Name <span class="req">*</span></label>
+        <label>Full Name <span class="req">*</span><span id="tag_full_name"></span></label>
         <input type="text" name="full_name" id="f_full_name" placeholder="e.g. Rajesh Kumar" required/>
       </div>
       <div class="field">
-        <label>Age <span class="req">*</span></label>
+        <label>Age <span class="req">*</span><span id="tag_age"></span></label>
         <input type="number" name="age" id="f_age" placeholder="e.g. 34" min="21" max="65" required/>
         <div class="hint">21–65 years</div>
       </div>
@@ -403,15 +452,26 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
   <div class="section-head">
     <div class="section-icon purple">📄</div>
     <span class="section-title">CIBIL Report Upload</span>
-    <span class="section-subtitle">AI auto-extracts all bureau data</span>
+    <span class="section-subtitle">AI auto-extracts all bureau + identity data</span>
   </div>
   <div class="section-body">
-    <!-- Upload area (hidden after parse) -->
+    <!-- Upload area (hidden after file selected) -->
     <div id="cibilUploadArea" class="cibil-upload-area" ondragover="handleDrag(event,true)" ondragleave="handleDrag(event,false)" ondrop="handleDrop(event)">
-      <input type="file" id="cibilFileInput" accept=".pdf" onchange="uploadCibil(this.files[0])"/>
+      <input type="file" id="cibilFileInput" accept=".pdf" onchange="cibilFileSelected(this.files[0])"/>
       <div class="cibil-upload-icon">📋</div>
       <div class="cibil-upload-title">Drop CIBIL PDF here or click to upload</div>
       <div class="cibil-upload-sub">Supports CIBIL, Experian, CRIF, Equifax reports &middot; Max 15 MB</div>
+    </div>
+
+    <!-- Password prompt (shown after file selected, before parse) -->
+    <div id="cibilPending" class="pdf-pending">
+      <div class="pdf-pending-name">📎 <span id="cibilPendingName"></span></div>
+      <div class="pdf-pw-row">
+        <input type="text" id="cibilPasswordInput" placeholder="PDF password (leave blank if not protected)" autocomplete="off"/>
+        <button type="button" class="pdf-pw-parse-btn" onclick="uploadCibil()">🔍 Parse Report</button>
+      </div>
+      <div class="pdf-pw-hint">🔒 If the CIBIL PDF is password-protected, enter it above (usually DOB like 01011990 or PAN)</div>
+      <button type="button" class="pdf-pw-cancel" onclick="clearCibil()">✕ Cancel, choose different file</button>
     </div>
 
     <!-- Parsing spinner -->
@@ -428,7 +488,7 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
           <div class="cibil-score-lbl">CIBIL Score (auto-extracted)</div>
         </div>
         <div style="margin-left:auto;text-align:right;">
-          <div class="cibil-result-badge">✅ Bureau Auto-Filled</div>
+          <div class="cibil-result-badge">✅ Bureau + Identity Auto-Filled</div>
           <button type="button" class="cibil-clear" onclick="clearCibil()" style="margin-top:6px;display:block;">✕ Clear &amp; re-upload</button>
         </div>
       </div>
@@ -453,15 +513,26 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
   <div class="section-head">
     <div class="section-icon blue">🏦</div>
     <span class="section-title">Bank Statement Upload</span>
-    <span class="section-subtitle">AI extracts AMB, bounces, EMIs, salary</span>
+    <span class="section-subtitle">AI extracts AMB, bounces, EMIs, salary & identity</span>
   </div>
   <div class="section-body">
     <!-- Upload area -->
     <div id="bsUploadArea" class="bs-upload-area" ondragover="bsDrag(event,true)" ondragleave="bsDrag(event,false)" ondrop="bsDrop(event)">
-      <input type="file" id="bsFileInput" accept=".pdf" onchange="uploadBankStmt(this.files[0])"/>
+      <input type="file" id="bsFileInput" accept=".pdf" onchange="bsFileSelected(this.files[0])"/>
       <div class="bs-upload-icon">📄</div>
       <div class="bs-upload-title">Drop Bank Statement PDF here or click to upload</div>
       <div class="bs-upload-sub">6–12 month statement · Max 20 MB · All major banks supported</div>
+    </div>
+
+    <!-- Password prompt (shown after file selected) -->
+    <div id="bsPending" class="bs-pdf-pending">
+      <div class="bs-pdf-pending-name">📎 <span id="bsPendingName"></span></div>
+      <div class="bs-pdf-pw-row">
+        <input type="text" id="bsPasswordInput" placeholder="PDF password (leave blank if not protected)" autocomplete="off"/>
+        <button type="button" class="bs-pdf-pw-parse-btn" onclick="uploadBankStmt()">🔍 Parse Statement</button>
+      </div>
+      <div class="bs-pdf-pw-hint">🔒 Many bank-generated statements are password-protected (usually DOB: DDMMYYYY or account number last 4 digits)</div>
+      <button type="button" class="bs-pdf-pw-cancel" onclick="clearBankStmt()">✕ Cancel, choose different file</button>
     </div>
 
     <!-- Spinner -->
@@ -485,6 +556,11 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
     <div id="bsError" class="bs-error">
       ⚠️ <span id="bsErrorMsg"></span>
       <button type="button" style="margin-left:8px;font-size:11px;color:#991b1b;background:none;border:none;cursor:pointer;text-decoration:underline;" onclick="clearBankStmt()">Try again</button>
+    </div>
+
+    <!-- Name mismatch warning -->
+    <div id="nameMismatchWarn" class="name-mismatch-warn">
+      ⚠️ <strong>Name mismatch:</strong> <span id="nameMismatchMsg"></span> — Please verify applicant identity.
     </div>
 
     <!-- Fraud alert (shown if flags detected) -->
@@ -825,6 +901,8 @@ document.querySelector('[name=employment_type]').addEventListener('change', func
 setLoanType(document.querySelector('.tab.active'));
 
 // ── CIBIL PDF UPLOAD ──────────────────────────────────────────────────────────
+let _cibilPendingFile = null;  // holds file between selection and parse click
+
 function handleDrag(e, over) {
   e.preventDefault();
   document.getElementById('cibilUploadArea').classList.toggle('drag-over', over);
@@ -833,27 +911,36 @@ function handleDrop(e) {
   e.preventDefault();
   document.getElementById('cibilUploadArea').classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
-  if (file) uploadCibil(file);
+  if (file) cibilFileSelected(file);
 }
 
-async function uploadCibil(file) {
+function cibilFileSelected(file) {
   if (!file) return;
   if (!file.name.toLowerCase().endsWith('.pdf')) {
-    showCibilError('Only PDF files are supported.');
-    return;
+    showCibilError('Only PDF files are supported.'); return;
   }
   if (file.size > 15 * 1024 * 1024) {
-    showCibilError('File too large. Maximum size is 15 MB.');
-    return;
+    showCibilError('File too large. Maximum size is 15 MB.'); return;
   }
+  _cibilPendingFile = file;
+  document.getElementById('cibilUploadArea').style.display = 'none';
+  document.getElementById('cibilPendingName').textContent = file.name;
+  document.getElementById('cibilPending').classList.add('visible');
+  document.getElementById('cibilPasswordInput').focus();
+}
 
-  document.getElementById('cibilUploadArea').style.display  = 'none';
-  document.getElementById('cibilResult').style.display      = 'none';
-  document.getElementById('cibilError').style.display       = 'none';
-  document.getElementById('cibilParsing').style.display     = 'block';
+async function uploadCibil() {
+  const file = _cibilPendingFile;
+  if (!file) return;
+
+  document.getElementById('cibilPending').classList.remove('visible');
+  document.getElementById('cibilResult').style.display   = 'none';
+  document.getElementById('cibilError').style.display    = 'none';
+  document.getElementById('cibilParsing').style.display  = 'block';
 
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('pdf_password', document.getElementById('cibilPasswordInput').value || '');
 
   try {
     const res  = await fetch('/parse-cibil', { method: 'POST', body: fd });
@@ -862,7 +949,14 @@ async function uploadCibil(file) {
     document.getElementById('cibilParsing').style.display = 'none';
 
     if (!res.ok || json.error) {
-      showCibilError(json.error || 'Parsing failed. Please try again.');
+      // If password error, show pending state again so user can re-enter password
+      if (json.error && json.error.toLowerCase().includes('password')) {
+        document.getElementById('cibilPending').classList.add('visible');
+        document.getElementById('cibilPasswordInput').style.borderColor = '#ef4444';
+        document.getElementById('cibilPasswordInput').placeholder = json.error;
+      } else {
+        showCibilError(json.error || 'Parsing failed. Please try again.');
+      }
       return;
     }
 
@@ -873,11 +967,39 @@ async function uploadCibil(file) {
   }
 }
 
+// Allow pressing Enter in password field
+document.addEventListener('DOMContentLoaded', () => {
+  const pw = document.getElementById('cibilPasswordInput');
+  if (pw) pw.addEventListener('keydown', e => { if (e.key === 'Enter') uploadCibil(); });
+  const bsPw = document.getElementById('bsPasswordInput');
+  if (bsPw) bsPw.addEventListener('keydown', e => { if (e.key === 'Enter') uploadBankStmt(); });
+});
+
 function autofillBureau(d) {
   // Fill hidden flag
   document.getElementById('cibilPdfParsedInput').value = 'yes';
 
-  // Fill bureau fields
+  // ── Auto-fill APPLICANT PROFILE from CIBIL ──────────────────────────────
+  const nameField = document.getElementById('f_full_name');
+  if (nameField && d.full_name && !nameField.value.trim()) {
+    nameField.value = d.full_name;
+    nameField.classList.add('auto-filled');
+    markAutoTag('tag_full_name', true);
+  }
+
+  // Age from DOB or direct age field
+  const ageField = document.getElementById('f_age');
+  if (ageField && !ageField.value && d.age) {
+    ageField.value = d.age;
+    ageField.classList.add('auto-filled');
+    markAutoTag('tag_age', true);
+  } else if (ageField && !ageField.value && d.date_of_birth) {
+    // Compute age from DOB
+    const computed = computeAgeFromDOB(d.date_of_birth);
+    if (computed) { ageField.value = computed; ageField.classList.add('auto-filled'); markAutoTag('tag_age', true); }
+  }
+
+  // ── Auto-fill BUREAU fields ──────────────────────────────────────────────
   const map = {
     'f_cibil_score':             d.cibil_score,
     'f_credit_vintage_yrs':      d.credit_vintage_yrs,
@@ -888,12 +1010,12 @@ function autofillBureau(d) {
     'f_existing_emi_total':      d.existing_emi_total,
   };
   const tagMap = {
-    'tag_cibil_score': 'f_cibil_score',
+    'tag_cibil_score':    'f_cibil_score',
     'tag_credit_vintage': 'f_credit_vintage_yrs',
-    'tag_enquiries': 'f_enquiries_6m',
-    'tag_dpd30': 'f_dpd_30_count',
-    'tag_dpd60': 'f_dpd_60_count',
-    'tag_dpd90': 'f_dpd_90_count',
+    'tag_enquiries':      'f_enquiries_6m',
+    'tag_dpd30':          'f_dpd_30_count',
+    'tag_dpd60':          'f_dpd_60_count',
+    'tag_dpd90':          'f_dpd_90_count',
   };
 
   Object.entries(map).forEach(([id, val]) => {
@@ -904,7 +1026,6 @@ function autofillBureau(d) {
     }
   });
 
-  // Show auto tags
   Object.entries(tagMap).forEach(([tagId, fieldId]) => {
     const el = document.getElementById(tagId);
     const field = document.getElementById(fieldId);
@@ -923,6 +1044,7 @@ function autofillBureau(d) {
   } else {
     document.getElementById('wo_no').checked = true;
   }
+  document.getElementById('tag_writeoff').innerHTML = '<span class="auto-tag">AUTO</span>';
 
   // Secured/unsecured select
   const mixSel = document.getElementById('f_secured_unsecured_ratio');
@@ -933,7 +1055,10 @@ function autofillBureau(d) {
     document.getElementById('tag_mix').innerHTML = '<span class="auto-tag">AUTO</span>';
   }
 
-  // Show result card
+  // Store extracted name for cross-check with bank statement
+  window._cibilExtractedName = (d.full_name || '').trim().toLowerCase();
+
+  // ── Show result card ─────────────────────────────────────────────────────
   const score = d.cibil_score;
   document.getElementById('cibilScoreDisplay').textContent = score || '—';
 
@@ -942,6 +1067,10 @@ function autofillBureau(d) {
   else if (score >= 700) chips.push({text: `CIBIL ${score} — Good`, cls:'ok'});
   else if (score >= 650) chips.push({text: `CIBIL ${score} — Fair`, cls:'warn'});
   else chips.push({text: `CIBIL ${score} — Poor`, cls:'bad'});
+
+  if (d.full_name) chips.push({text: `👤 ${d.full_name}`, cls:'ok'});
+  if (d.pan_number) chips.push({text: `🪪 PAN: ${d.pan_number}`, cls:'ok'});
+  if (d.age) chips.push({text: `Age: ${d.age}`, cls:'ok'});
 
   if (d.dpd_90_count > 0) chips.push({text:`${d.dpd_90_count}x DPD 90+`, cls:'bad'});
   else if (d.dpd_30_count > 0) chips.push({text:`${d.dpd_30_count}x DPD 30+`, cls:'warn'});
@@ -964,29 +1093,68 @@ function autofillBureau(d) {
 
   document.getElementById('cibilResult').style.display = 'block';
   document.getElementById('bureauSubtitle').textContent = '✅ Auto-filled from CIBIL PDF';
+
+  // Trigger name cross-check if bank statement already parsed
+  checkNameMismatch();
+}
+
+function computeAgeFromDOB(dob) {
+  if (!dob) return null;
+  // Handle DD/MM/YYYY or YYYY-MM-DD
+  let d;
+  if (dob.includes('/')) {
+    const parts = dob.split('/');
+    if (parts.length === 3) d = new Date(parts[2], parts[1]-1, parts[0]);
+  } else if (dob.includes('-')) {
+    d = new Date(dob);
+  }
+  if (!d || isNaN(d)) return null;
+  const today = new Date();
+  let age = today.getFullYear() - d.getFullYear();
+  if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) age--;
+  return (age > 0 && age < 120) ? age : null;
+}
+
+function markAutoTag(tagId, show) {
+  const el = document.getElementById(tagId);
+  if (el) el.innerHTML = show ? '<span class="auto-tag">AUTO</span>' : '';
 }
 
 function showCibilError(msg) {
   document.getElementById('cibilUploadArea').style.display = '';
+  document.getElementById('cibilPending').classList.remove('visible');
   document.getElementById('cibilError').style.display = 'block';
   document.getElementById('cibilErrorMsg').textContent = msg;
 }
 
 function clearCibil() {
+  _cibilPendingFile = null;
   document.getElementById('cibilPdfParsedInput').value = 'no';
   document.getElementById('cibilUploadArea').style.display = '';
+  document.getElementById('cibilPending').classList.remove('visible');
   document.getElementById('cibilResult').style.display = 'none';
   document.getElementById('cibilError').style.display = 'none';
+  document.getElementById('cibilParsing').style.display = 'none';
   document.getElementById('cibilFileInput').value = '';
+  document.getElementById('cibilPasswordInput').value = '';
+  document.getElementById('cibilPasswordInput').style.borderColor = '';
   document.getElementById('bureauSubtitle').textContent = 'CIBIL / Experian / CRIF signals';
+  window._cibilExtractedName = '';
 
-  // Remove auto-fill highlights
-  document.querySelectorAll('.auto-filled').forEach(el => el.classList.remove('auto-filled'));
+  // Remove auto-fill highlights for CIBIL-sourced fields
+  ['f_full_name','f_age','f_cibil_score','f_credit_vintage_yrs','f_enquiries_6m',
+   'f_dpd_30_count','f_dpd_60_count','f_dpd_90_count','f_existing_emi_total'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = el.defaultValue || (id === 'f_existing_emi_total' ? '0' : ''); el.classList.remove('auto-filled'); }
+  });
   document.querySelectorAll('.auto-tag').forEach(el => el.remove());
   document.getElementById('emiAutoTag').innerHTML = '';
+  document.getElementById('nameMismatchWarn').style.display = 'none';
 }
 
 // ── BANK STATEMENT UPLOAD ─────────────────────────────────────────────────────
+let _bsPendingFile = null;
+
 function bsDrag(e, over) {
   e.preventDefault();
   document.getElementById('bsUploadArea').classList.toggle('drag-over', over);
@@ -995,10 +1163,10 @@ function bsDrop(e) {
   e.preventDefault();
   document.getElementById('bsUploadArea').classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
-  if (file) uploadBankStmt(file);
+  if (file) bsFileSelected(file);
 }
 
-async function uploadBankStmt(file) {
+function bsFileSelected(file) {
   if (!file) return;
   if (!file.name.toLowerCase().endsWith('.pdf')) {
     showBsError('Only PDF files are supported.'); return;
@@ -1006,21 +1174,42 @@ async function uploadBankStmt(file) {
   if (file.size > 20 * 1024 * 1024) {
     showBsError('File too large. Maximum size is 20 MB.'); return;
   }
-
+  _bsPendingFile = file;
   document.getElementById('bsUploadArea').style.display = 'none';
-  document.getElementById('bsResult').style.display     = 'none';
-  document.getElementById('bsError').style.display      = 'none';
-  document.getElementById('fraudAlert').style.display   = 'none';
-  document.getElementById('bsParsing').style.display    = 'block';
+  document.getElementById('bsPendingName').textContent = file.name;
+  document.getElementById('bsPending').classList.add('visible');
+  document.getElementById('bsPasswordInput').focus();
+}
+
+async function uploadBankStmt() {
+  const file = _bsPendingFile;
+  if (!file) return;
+
+  document.getElementById('bsPending').classList.remove('visible');
+  document.getElementById('bsResult').style.display      = 'none';
+  document.getElementById('bsError').style.display       = 'none';
+  document.getElementById('fraudAlert').style.display    = 'none';
+  document.getElementById('nameMismatchWarn').style.display = 'none';
+  document.getElementById('bsParsing').style.display     = 'block';
 
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('pdf_password', document.getElementById('bsPasswordInput').value || '');
 
   try {
     const res  = await fetch('/parse-bank-statement', { method: 'POST', body: fd });
     const json = await res.json();
     document.getElementById('bsParsing').style.display = 'none';
-    if (!res.ok || json.error) { showBsError(json.error || 'Parsing failed.'); return; }
+    if (!res.ok || json.error) {
+      if (json.error && json.error.toLowerCase().includes('password')) {
+        document.getElementById('bsPending').classList.add('visible');
+        document.getElementById('bsPasswordInput').style.borderColor = '#ef4444';
+        document.getElementById('bsPasswordInput').placeholder = json.error;
+      } else {
+        showBsError(json.error || 'Parsing failed.');
+      }
+      return;
+    }
     autofillBankStmt(json.data);
   } catch(err) {
     document.getElementById('bsParsing').style.display = 'none';
@@ -1041,7 +1230,18 @@ function autofillBankStmt(d) {
   document.getElementById('bsUpiInput').value       = d.upi_credits_monthly_avg || 0;
   document.getElementById('bsEmiCountInput').value  = d.emi_accounts_count || 0;
 
-  // Auto-fill visible form fields too
+  // ── Auto-fill APPLICANT PROFILE from bank statement (if not already filled) ──
+  const nameField = document.getElementById('f_full_name');
+  if (nameField && d.account_holder && !nameField.value.trim()) {
+    nameField.value = d.account_holder;
+    nameField.classList.add('auto-filled');
+    markAutoTag('tag_full_name', true);
+  }
+
+  // Store for cross-check
+  window._bsExtractedName = (d.account_holder || '').trim().toLowerCase();
+
+  // ── Auto-fill visible financial form fields ──────────────────────────────
   const amb = d.avg_monthly_balance;
   if (amb > 0) {
     const ambField = document.querySelector('[name=avg_monthly_balance]');
@@ -1059,11 +1259,21 @@ function autofillBankStmt(d) {
       emiField.value = Math.round(emi); emiField.classList.add('auto-filled');
     }
   }
+  // Salary autofill if income not entered yet
+  if (d.salary_amount > 0) {
+    const incomeField = document.querySelector('[name=monthly_income]');
+    if (incomeField && !incomeField.value) {
+      incomeField.value = Math.round(d.salary_amount);
+      incomeField.classList.add('auto-filled');
+    }
+  }
   if (d.salary_credit_regular === false) {
     document.getElementById('scr_no').checked = true;
+  } else if (d.salary_credit_regular === true) {
+    document.getElementById('scr_yes').checked = true;
   }
 
-  // Build metrics display
+  // ── Build metrics display ────────────────────────────────────────────────
   const fmt = n => '₹' + Number(n||0).toLocaleString('en-IN');
   const metrics = [
     { val: fmt(d.avg_monthly_balance), lbl: 'Avg Balance' },
@@ -1077,8 +1287,12 @@ function autofillBankStmt(d) {
     `<div class="bs-metric"><div class="bm-val">${m.val}</div><div class="bm-lbl">${m.lbl}</div></div>`
   ).join('');
 
-  // Chips
+  // ── Chips ────────────────────────────────────────────────────────────────
   const chips = [];
+  if (d.account_holder) chips.push({ text: `👤 ${d.account_holder}`, cls:'ok' });
+  if (d.bank_name) chips.push({ text: `🏦 ${d.bank_name}`, cls:'ok' });
+  if (d.account_type) chips.push({ text: d.account_type + ' A/C', cls:'ok' });
+
   const declIncome = parseFloat(document.querySelector('[name=monthly_income]')?.value || 0);
   const bsSalary   = d.salary_amount || 0;
   if (bsSalary > 0 && declIncome > 0) {
@@ -1108,8 +1322,29 @@ function autofillBankStmt(d) {
 
   document.getElementById('bsResult').style.display = 'block';
 
-  // Pre-screen fraud signals from bank statement vs declared
+  // ── Cross-document checks ────────────────────────────────────────────────
+  checkNameMismatch();
   checkCrossDocFraud(d, declIncome);
+}
+
+function checkNameMismatch() {
+  const cName = (window._cibilExtractedName || '').trim();
+  const bName = (window._bsExtractedName  || '').trim();
+  if (!cName || !bName) return;
+
+  // Simple similarity: check if one contains key words of the other
+  const cWords = cName.split(/\s+/).filter(w => w.length > 2);
+  const bWords = bName.split(/\s+/).filter(w => w.length > 2);
+  const overlap = cWords.filter(w => bWords.some(bw => bw.includes(w) || w.includes(bw)));
+
+  const warn = document.getElementById('nameMismatchWarn');
+  if (overlap.length === 0 && cWords.length > 0 && bWords.length > 0) {
+    warn.style.display = 'block';
+    document.getElementById('nameMismatchMsg').textContent =
+      `CIBIL shows "${window._cibilExtractedName.toUpperCase()}" but bank statement shows "${window._bsExtractedName.toUpperCase()}"`;
+  } else {
+    warn.style.display = 'none';
+  }
 }
 
 function checkCrossDocFraud(d, declIncome) {
@@ -1147,24 +1382,32 @@ function checkCrossDocFraud(d, declIncome) {
 
 function showBsError(msg) {
   document.getElementById('bsUploadArea').style.display = '';
+  document.getElementById('bsPending').classList.remove('visible');
   document.getElementById('bsError').style.display = 'block';
   document.getElementById('bsErrorMsg').textContent = msg;
 }
 
 function clearBankStmt() {
+  _bsPendingFile = null;
   document.getElementById('bsParsedInput').value = 'no';
   ['bsSalaryInput','bsAmbInput','bsBounceInput','bsEmiInput','bsLargeCredInput','bsCdRatioInput','bsMonthsInput','bsUpiInput','bsEmiCountInput']
     .forEach(id => document.getElementById(id).value = '0');
   document.getElementById('bsUploadArea').style.display = '';
-  document.getElementById('bsResult').style.display  = 'none';
-  document.getElementById('bsError').style.display   = 'none';
-  document.getElementById('bsParsing').style.display = 'none';
+  document.getElementById('bsPending').classList.remove('visible');
+  document.getElementById('bsResult').style.display   = 'none';
+  document.getElementById('bsError').style.display    = 'none';
+  document.getElementById('bsParsing').style.display  = 'none';
   document.getElementById('fraudAlert').style.display = 'none';
+  document.getElementById('nameMismatchWarn').style.display = 'none';
   document.getElementById('preFraudSection').style.display = 'none';
   document.getElementById('bsFileInput').value = '';
-  // Remove auto-fills from bank statement
-  document.querySelectorAll('.auto-filled').forEach(el => {
-    if (!el.id.startsWith('f_')) el.classList.remove('auto-filled');
+  document.getElementById('bsPasswordInput').value = '';
+  document.getElementById('bsPasswordInput').style.borderColor = '';
+  window._bsExtractedName = '';
+  // Remove auto-fills that came from bank statement only
+  ['avg_monthly_balance','bounce_count_6m','existing_emi_total','monthly_income'].forEach(name => {
+    const el = document.querySelector(`[name=${name}]`);
+    if (el && !el.id?.startsWith('f_')) el.classList.remove('auto-filled');
   });
 }
 
