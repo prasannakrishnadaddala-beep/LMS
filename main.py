@@ -62,9 +62,21 @@ if not ANTHROPIC_API_KEY:
     raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set")
 
 DATABASE_URL   = os.environ.get("DATABASE_URL", "")
-SECRET_KEY     = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+SECRET_KEY     = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_hex(32)
+    logger.warning("⚠️  SECRET_KEY not set — sessions will be invalidated on every restart. Set SECRET_KEY in Railway env vars.")
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme123")
+
+# ── PII masking for logs/audit (never log raw PAN/Aadhaar) ────────────────────
+def mask_pan(pan: str) -> str:
+    pan = (pan or "").strip()
+    return pan[:5] + "****" + pan[-1] if len(pan) == 10 else pan[:3] + "****" if pan else ""
+
+def mask_aadhaar(uid: str) -> str:
+    digits = (uid or "").replace(" ", "")
+    return f"XXXX XXXX {digits[-4:]}" if len(digits) >= 4 else "****"
 
 # ── App setup ──────────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
@@ -264,6 +276,33 @@ def init_db():
             except Exception:
                 pass  # Column may already exist
 
+        # Audit log table — immutable record of every parse + decision
+        _run_ddl(conn, """
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id            SERIAL PRIMARY KEY,
+                event_type    VARCHAR(50)  NOT NULL,
+                application_id VARCHAR(30),
+                username      VARCHAR(50),
+                bank_name     VARCHAR(100),
+                details       JSONB        DEFAULT '{}',
+                ip_address    VARCHAR(45),
+                created_at    TIMESTAMPTZ  DEFAULT NOW()
+            )
+        """)
+
+        # Outcome feedback table — for learning system / model retraining
+        _run_ddl(conn, """
+            CREATE TABLE IF NOT EXISTS loan_outcomes (
+                id             SERIAL PRIMARY KEY,
+                application_id VARCHAR(30)  UNIQUE NOT NULL,
+                outcome        VARCHAR(20)  NOT NULL,
+                days_to_default INTEGER,
+                reported_by    VARCHAR(50),
+                reported_at    TIMESTAMPTZ  DEFAULT NOW(),
+                notes          TEXT
+            )
+        """)
+
         # Seed admin user if not exists
         existing = conn.run(
             "SELECT COUNT(*) FROM users WHERE username = :u",
@@ -337,6 +376,24 @@ def get_user_from_api_key(api_key: str) -> dict | None:
     except Exception as e:
         logger.error(f"get_user_from_api_key: {e}")
     return None
+
+# ── Audit logger ──────────────────────────────────────────────────────────────
+def write_audit_log(event_type: str, username: str, bank_name: str,
+                    details: dict, application_id: str = None, ip: str = None):
+    """Fire-and-forget audit log. Never raises — audit must not block requests."""
+    if not DATABASE_URL:
+        return
+    try:
+        conn = get_db_conn()
+        conn.run(
+            """INSERT INTO audit_logs (event_type, application_id, username, bank_name, details, ip_address)
+               VALUES (:et, :aid, :u, :bn, :d::jsonb, :ip)""",
+            et=event_type, aid=application_id, u=username, bn=bank_name,
+            d=json.dumps(details), ip=ip
+        )
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Audit log write failed (non-critical): {e}")
 
 # ── Hard Policy Gate ───────────────────────────────────────────────────────────
 def run_policy_gate(data: dict, rules: dict) -> list:
@@ -676,7 +733,11 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
         raw    = message.content[0].text.strip()
         raw    = raw.replace("```json", "").replace("```", "").strip()
         result = json.loads(raw)
-        logger.info(f"CIBIL parsed by {user['username']}: score={result.get('cibil_score')} name={result.get('full_name','')}")
+        pan_safe = mask_pan(result.get("pan_number", ""))
+        logger.info(f"CIBIL parsed by {user['username']}: score={result.get('cibil_score')} pan={pan_safe}")
+        write_audit_log("CIBIL_PARSE", user["username"], user.get("bank_name",""),
+                        {"score": result.get("cibil_score"), "pan_masked": pan_safe,
+                         "name": result.get("full_name","")})
         return JSONResponse(content={"ok": True, "data": result})
     except json.JSONDecodeError as e:
         logger.error(f"CIBIL JSON parse error: {e}")
@@ -775,6 +836,9 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
         raw    = raw.replace("```json", "").replace("```", "").strip()
         result = json.loads(raw)
         logger.info(f"Bank statement parsed by {user['username']}: holder={result.get('account_holder','')} AMB=₹{result.get('avg_monthly_balance')}")
+        write_audit_log("BANK_STMT_PARSE", user["username"], user.get("bank_name",""),
+                        {"amb": result.get("avg_monthly_balance"), "months": result.get("statement_months"),
+                         "bounces": result.get("bounce_count"), "bank": result.get("bank_name","")})
         return JSONResponse(content={"ok": True, "data": result})
     except json.JSONDecodeError as e:
         logger.error(f"Bank statement JSON parse error: {e}")
@@ -866,7 +930,11 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
         raw    = message.content[0].text.strip()
         raw    = raw.replace("```json", "").replace("```", "").strip()
         result = json.loads(raw)
-        logger.info(f"Payslip parsed by {user['username']}: employer={result.get('employer_name','')} net=₹{result.get('net_salary')}")
+        pan_safe = mask_pan(result.get("pan_number", ""))
+        logger.info(f"Payslip parsed by {user['username']}: employer={result.get('employer_name','')} net=₹{result.get('net_salary')} pan={pan_safe}")
+        write_audit_log("PAYSLIP_PARSE", user["username"], user.get("bank_name",""),
+                        {"employer": result.get("employer_name",""), "net_salary": result.get("net_salary"),
+                         "pan_masked": pan_safe, "designation": result.get("designation","")})
         return JSONResponse(content={"ok": True, "data": result})
     except json.JSONDecodeError as e:
         logger.error(f"Payslip JSON parse error: {e}")
@@ -1129,6 +1197,17 @@ def analyze_loan(
     collateral_value:     float = Form(0),
     business_vintage_yrs: float = Form(0),
     cibil_pdf_parsed:     str   = Form("no"),
+    # Bank statement hidden fields (populated by JS after parse)
+    bank_statement_parsed:       str   = Form("no"),
+    bs_salary_amount:            float = Form(0),
+    bs_avg_monthly_balance:      float = Form(0),
+    bs_bounce_count:             int   = Form(0),
+    bs_emi_debits_detected:      float = Form(0),
+    bs_large_unusual_credits:    int   = Form(0),
+    bs_credit_debit_ratio:       float = Form(0),
+    bs_statement_months:         int   = Form(0),
+    bs_upi_credits_monthly_avg:  float = Form(0),
+    bs_emi_accounts_count:       int   = Form(0),
     # Payslip fields
     payslip_pdf_parsed:   str   = Form("no"),
     ps_employer_name:     str   = Form(""),
@@ -1159,6 +1238,17 @@ def analyze_loan(
         "loan_purpose": loan_purpose, "collateral_value": collateral_value,
         "business_vintage_yrs": business_vintage_yrs,
         "cibil_pdf_parsed": cibil_pdf_parsed.lower() in ("yes","true","1"),
+        # Bank statement fields — previously dropped, now correctly forwarded
+        "bank_statement_parsed":    bank_statement_parsed.lower() in ("yes","true","1"),
+        "bs_salary_amount":         bs_salary_amount,
+        "bs_avg_monthly_balance":   bs_avg_monthly_balance,
+        "bs_bounce_count":          bs_bounce_count,
+        "bs_emi_debits_detected":   bs_emi_debits_detected,
+        "bs_large_unusual_credits": bs_large_unusual_credits,
+        "bs_credit_debit_ratio":    bs_credit_debit_ratio,
+        "bs_statement_months":      bs_statement_months,
+        "bs_upi_credits_monthly_avg": bs_upi_credits_monthly_avg,
+        "bs_emi_accounts_count":    bs_emi_accounts_count,
         "payslip_pdf_parsed": payslip_pdf_parsed.lower() in ("yes","true","1"),
         "ps_employer_name": ps_employer_name.strip()[:100],
         "ps_employment_type": ps_employment_type,
@@ -1554,6 +1644,212 @@ def _save(result, age, emp, employer, tenure, cibil, income, itr, gst,
         logger.error(f"❌ DB save: {e}")
 
 
+
+# ── Outcome Feedback API (Learning System Foundation) ─────────────────────────
+@app.post("/api/v1/feedback")
+@limiter.limit("30/minute")
+async def submit_outcome(request: Request, x_api_key: str = Header(default="")):
+    """
+    Let lenders submit actual loan outcomes back to the platform.
+    This is the data foundation for a future ML risk model.
+
+    Body: {
+        "application_id": "LN-20260403-XXXXX",
+        "outcome": "repaid" | "defaulted" | "prepaid" | "npa" | "restructured",
+        "days_to_default": 90,   // optional, for defaulted cases
+        "notes": "..."           // optional
+    }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key header."}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    app_id  = body.get("application_id", "").strip()
+    outcome = body.get("outcome", "").lower().strip()
+    valid_outcomes = {"repaid", "defaulted", "prepaid", "npa", "restructured", "written_off"}
+
+    if not app_id:
+        return JSONResponse({"error": "application_id is required."}, status_code=400)
+    if outcome not in valid_outcomes:
+        return JSONResponse({"error": f"outcome must be one of: {sorted(valid_outcomes)}"}, status_code=400)
+
+    if not DATABASE_URL:
+        return JSONResponse({"error": "No database configured."}, status_code=500)
+
+    try:
+        conn = get_db_conn()
+        # Verify application exists and belongs to this bank
+        rows = conn.run(
+            "SELECT id, bank_name, decision FROM loan_applications WHERE application_id = :aid",
+            aid=app_id
+        )
+        if not rows:
+            conn.close()
+            return JSONResponse({"error": "Application not found."}, status_code=404)
+
+        app_bank = rows[0][1]
+        if api_user.get("role") != "admin" and app_bank != api_user.get("bank_name"):
+            conn.close()
+            return JSONResponse({"error": "Access denied — application belongs to a different bank."}, status_code=403)
+
+        conn.run(
+            """INSERT INTO loan_outcomes (application_id, outcome, days_to_default, reported_by, notes)
+               VALUES (:aid, :outcome, :dtd, :rby, :notes)
+               ON CONFLICT (application_id) DO UPDATE
+               SET outcome=EXCLUDED.outcome, days_to_default=EXCLUDED.days_to_default,
+                   reported_by=EXCLUDED.reported_by, reported_at=NOW(), notes=EXCLUDED.notes""",
+            aid=app_id, outcome=outcome,
+            dtd=body.get("days_to_default"),
+            rby=api_user["username"],
+            notes=body.get("notes", "")[:500]
+        )
+        conn.close()
+
+        write_audit_log("OUTCOME_FEEDBACK", api_user["username"], api_user.get("bank_name",""),
+                        {"application_id": app_id, "outcome": outcome,
+                         "days_to_default": body.get("days_to_default")})
+
+        logger.info(f"Outcome feedback: {app_id} → {outcome} by {api_user['username']}")
+        return JSONResponse({"ok": True, "application_id": app_id, "outcome": outcome})
+
+    except Exception as e:
+        logger.error(f"Outcome feedback error: {e}")
+        return JSONResponse({"error": "Failed to record outcome."}, status_code=500)
+
+
+# ── Application Retrieval API ──────────────────────────────────────────────────
+@app.get("/api/v1/application/{application_id}")
+@limiter.limit("60/minute")
+async def get_application(
+    request: Request,
+    application_id: str,
+    x_api_key: str = Header(default="")
+):
+    """
+    Retrieve a stored loan decision by application ID.
+    Useful for LMS / MuleSoft integration polling.
+    Returns masked PAN/Aadhaar in applicant details.
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key header."}, status_code=401)
+
+    if not DATABASE_URL:
+        return JSONResponse({"error": "No database configured."}, status_code=500)
+
+    try:
+        conn = get_db_conn()
+        rows = conn.run("""
+            SELECT la.application_id, la.applicant_name, la.loan_type, la.loan_amount,
+                   la.decision, la.risk_level, la.risk_score, la.confidence_score,
+                   la.approved_amount, la.interest_rate, la.foir, la.cibil_score,
+                   la.reason, la.recommendation, la.counter_offer, la.redecision_hints,
+                   la.strengths, la.concerns, la.fraud_flags, la.documentation_required,
+                   la.employment_source, la.income_source, la.bank_name, la.created_at,
+                   la.cibil_pdf_parsed, la.bank_stmt_parsed, la.payslip_pdf_parsed,
+                   lo.outcome, lo.days_to_default
+            FROM loan_applications la
+            LEFT JOIN loan_outcomes lo ON la.application_id = lo.application_id
+            WHERE la.application_id = :aid
+        """, aid=application_id)
+        conn.close()
+
+        if not rows:
+            return JSONResponse({"error": "Application not found."}, status_code=404)
+
+        r = rows[0]
+        app_bank = r[22]
+
+        if api_user.get("role") != "admin" and app_bank != api_user.get("bank_name"):
+            return JSONResponse({"error": "Access denied."}, status_code=403)
+
+        return JSONResponse({
+            "application_id":      r[0],
+            "applicant_name":      r[1],
+            "loan_type":           r[2],
+            "loan_amount":         float(r[3] or 0),
+            "decision":            r[4],
+            "risk_level":          r[5],
+            "risk_score":          r[6],
+            "confidence_score":    r[7],
+            "approved_amount":     float(r[8] or 0),
+            "interest_rate":       float(r[9] or 0),
+            "foir":                float(r[10] or 0),
+            "cibil_score":         r[11],
+            "reason":              r[12],
+            "recommendation":      r[13],
+            "counter_offer":       r[14],
+            "redecision_hints":    r[15],
+            "strengths":           json.loads(r[16] or "[]"),
+            "concerns":            json.loads(r[17] or "[]"),
+            "fraud_flags":         json.loads(r[18] or "[]"),
+            "documentation_required": json.loads(r[19] or "[]"),
+            "employment_source":   r[20],
+            "income_source":       r[21],
+            "bank_name":           r[22],
+            "created_at":          r[23].isoformat() if r[23] else None,
+            "documents_used": {
+                "cibil_pdf":    bool(r[24]),
+                "bank_stmt":    bool(r[25]),
+                "payslip":      bool(r[26]),
+            },
+            "outcome": {
+                "status":          r[27],
+                "days_to_default": r[28],
+            } if r[27] else None,
+        })
+    except Exception as e:
+        logger.error(f"get_application error: {e}")
+        return JSONResponse({"error": "Failed to retrieve application."}, status_code=500)
+
+
+# ── Audit Log API (admin only) ────────────────────────────────────────────────
+@app.get("/api/v1/audit-logs")
+@limiter.limit("30/minute")
+async def get_audit_logs(
+    request: Request,
+    x_api_key: str = Header(default=""),
+    limit: int = 50,
+    event_type: str = None
+):
+    """Retrieve recent audit log entries. Admin only."""
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user or api_user.get("role") != "admin":
+        return JSONResponse({"error": "Admin access required."}, status_code=403)
+
+    if not DATABASE_URL:
+        return JSONResponse({"error": "No database configured."}, status_code=500)
+
+    try:
+        conn = get_db_conn()
+        limit = min(max(limit, 1), 200)
+        if event_type:
+            rows = conn.run(
+                "SELECT event_type, application_id, username, bank_name, details, ip_address, created_at "
+                "FROM audit_logs WHERE event_type = :et ORDER BY created_at DESC LIMIT :lim",
+                et=event_type, lim=limit
+            )
+        else:
+            rows = conn.run(
+                "SELECT event_type, application_id, username, bank_name, details, ip_address, created_at "
+                "FROM audit_logs ORDER BY created_at DESC LIMIT :lim",
+                lim=limit
+            )
+        conn.close()
+        return JSONResponse([{
+            "event_type": r[0], "application_id": r[1], "username": r[2],
+            "bank_name": r[3], "details": r[4], "ip": r[5],
+            "created_at": r[6].isoformat() if r[6] else None
+        } for r in rows])
+    except Exception as e:
+        logger.error(f"audit_logs error: {e}")
+        return JSONResponse({"error": "Failed to retrieve audit logs."}, status_code=500)
+
 @app.get("/health")
 def health():
     db_ok = False
@@ -1568,8 +1864,9 @@ def health():
         "database": "connected" if db_ok else "not connected",
         "features": ["Payslip PDF parsing", "CIBIL PDF parsing", "Bank statement PDF parsing",
                      "Document priority engine (Payslip>Bank>CIBIL)", "Multi-user", "Multi-bank",
-                     "REST API", "Risk-based pricing", "Fraud detection", "Source-verified decisions",
-                     "Confidence scoring", "Re-decision hints"]
+                     "REST API (analyze + feedback + retrieval)", "Risk-based pricing", "Fraud detection",
+                     "Source-verified decisions", "Confidence scoring", "Re-decision hints",
+                     "Audit logs (PII-masked)", "Outcome feedback loop", "Application retrieval API"]
     }
 
 if __name__ == "__main__":
