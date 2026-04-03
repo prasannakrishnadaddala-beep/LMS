@@ -775,7 +775,17 @@ async def parse_documents(
         bank_bytes    = await _load(bank_file,     bank_password,    20, "Bank statement")
         payslip_bytes = await _load(payslip_file,  payslip_password, 15, "Payslip")
     except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=422)
+        err_str = str(e)
+        err_lower = err_str.lower()
+        if err_lower.startswith("cibil"):
+            doc_failed = "cibil"
+        elif err_lower.startswith("bank"):
+            doc_failed = "bank"
+        elif err_lower.startswith("payslip"):
+            doc_failed = "payslip"
+        else:
+            doc_failed = "unknown"
+        return JSONResponse({"error": err_str, "doc_failed": doc_failed}, status_code=422)
 
     if not any([cibil_bytes, bank_bytes, payslip_bytes]):
         return JSONResponse({"error": "At least one document must be provided."}, status_code=400)
