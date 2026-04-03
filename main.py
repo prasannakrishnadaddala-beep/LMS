@@ -604,6 +604,189 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
         logger.error(f"CIBIL parse exception: {e}")
         return JSONResponse({"error": "PDF parsing failed. Please try again."}, status_code=500)
 
+# ── Bank Statement PDF Parser ──────────────────────────────────────────────────
+@app.post("/parse-bank-statement")
+@limiter.limit("5/minute")
+async def parse_bank_statement(
+    request: Request,
+    session: str  = Cookie(default=None),
+    file: UploadFile = File(...),
+):
+    user = verify_session(session)
+    if not user:
+        return JSONResponse({"error": "Session expired. Please log in again."}, status_code=401)
+
+    fname = (file.filename or "").lower()
+    if not fname.endswith(".pdf"):
+        return JSONResponse({"error": "Please upload a bank statement PDF file."}, status_code=400)
+
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        return JSONResponse({"error": "PDF too large. Maximum size is 20 MB."}, status_code=400)
+    if len(content) < 500:
+        return JSONResponse({"error": "PDF appears to be empty or corrupted."}, status_code=400)
+
+    b64 = base64.standard_b64encode(content).decode("utf-8")
+
+    extraction_prompt = """You are an expert Indian bank statement analysis system for NBFC credit underwriting.
+Analyze this bank statement carefully and extract all financial signals relevant to loan underwriting.
+
+Return ONLY valid JSON — no explanation, no markdown, no preamble:
+{
+  "avg_monthly_balance": <average end-of-day balance over all months, in rupees, default 0>,
+  "min_monthly_balance": <lowest monthly closing balance seen, in rupees, default 0>,
+  "max_monthly_balance": <highest monthly closing balance seen, in rupees, default 0>,
+  "avg_monthly_credit": <average total credits (inflows) per month in rupees, default 0>,
+  "avg_monthly_debit": <average total debits (outflows) per month in rupees, default 0>,
+  "bounce_count": <total number of bounced/returned cheques or ECS/NACH returns in the statement period, default 0>,
+  "salary_credits_count": <number of months with regular salary credit detected, default 0>,
+  "salary_amount": <detected monthly salary credit amount if consistent, else 0>,
+  "salary_credit_regular": <true if salary credited on similar dates each month, else false>,
+  "emi_debits_detected": <estimated total monthly EMI/loan debit outflows in rupees, default 0>,
+  "emi_accounts_count": <number of distinct loan EMI debits detected, default 0>,
+  "cash_withdrawals_monthly_avg": <average monthly cash withdrawal amount, default 0>,
+  "upi_credits_monthly_avg": <average monthly UPI/NEFT inflow from business/clients, default 0>,
+  "statement_months": <number of months covered by this statement, default 0>,
+  "bank_name": <bank name as appearing on statement, or "">,
+  "account_holder": <account holder name, or "">,
+  "account_type": <"Savings" or "Current" or "OD" or "">,
+  "closing_balance": <most recent closing balance in the statement, default 0>,
+  "inward_cheque_returns": <number of inward cheque/ECS returns — indicates bad debtors if current account, default 0>,
+  "outward_cheque_returns": <number of outward cheque/ECS/NACH returns — indicates payment defaults, default 0>,
+  "large_unusual_credits": <number of unusually large one-time credits that don't match salary pattern, default 0>,
+  "credit_debit_ratio": <round(avg_monthly_credit / avg_monthly_debit, 2) if debit > 0 else null>,
+  "extraction_notes": <string max 200 chars — key observations like "GST credits visible", "2 loan EMIs detected", "irregular salary">
+}"""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1500,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": b64,
+                        }
+                    },
+                    {"type": "text", "text": extraction_prompt}
+                ]
+            }]
+        )
+        raw    = message.content[0].text.strip()
+        raw    = raw.replace("```json", "").replace("```", "").strip()
+        result = json.loads(raw)
+        logger.info(f"Bank statement parsed by {user['username']}: AMB=₹{result.get('avg_monthly_balance')}")
+        return JSONResponse(content={"ok": True, "data": result})
+    except json.JSONDecodeError as e:
+        logger.error(f"Bank statement JSON parse error: {e}")
+        return JSONResponse({"error": "Could not extract structured data. Ensure this is a valid bank statement PDF."}, status_code=422)
+    except Exception as e:
+        logger.error(f"Bank statement parse exception: {e}")
+        return JSONResponse({"error": "PDF parsing failed. Please try again."}, status_code=500)
+
+
+# ── Fraud Rule Engine ──────────────────────────────────────────────────────────
+def run_fraud_gate(data: dict) -> list:
+    """
+    Rule-based pre-AI fraud detection engine.
+    Returns list of fraud flag strings. Empty list = clean.
+    """
+    flags = []
+    income        = data.get("monthly_income", 0)
+    amb           = data.get("avg_monthly_balance", 0)
+    itr_income    = data.get("itr_income", 0)
+    gst_turnover  = data.get("gst_turnover", 0)
+    loan_amount   = data.get("loan_amount", 0)
+    cibil_score   = data.get("cibil_score", 0)
+    enquiries_6m  = data.get("enquiries_6m", 0)
+    bounce_count  = data.get("bounce_count_6m", 0)
+    emp_type      = data.get("employment_type", "")
+    employer      = data.get("employer_name", "").lower()
+    loan_purpose  = data.get("loan_purpose", "").lower()
+    dpd_30        = data.get("dpd_30_count", 0)
+    dpd_90        = data.get("dpd_90_count", 0)
+    wo            = data.get("writeoff_settled", False)
+    vintage       = data.get("credit_vintage_yrs", 0)
+    existing_emi  = data.get("existing_emi_total", 0)
+    bs_parsed     = data.get("bank_statement_parsed", False)
+    bs_salary     = data.get("bs_salary_amount", 0)
+    bs_bounce     = data.get("bs_bounce_count", 0)
+    bs_amb        = data.get("bs_avg_monthly_balance", 0)
+    bs_emi_debits = data.get("bs_emi_debits_detected", 0)
+    large_credits = data.get("bs_large_unusual_credits", 0)
+
+    # ── Income Inflation Detection ──────────────────────────────────────────
+    if itr_income > 0 and income > 0:
+        declared_annual = income * 12
+        if declared_annual > itr_income * 2.5:
+            flags.append(f"Income inflation risk: declared ₹{income:,.0f}/mo but ITR shows ₹{itr_income/12:,.0f}/mo annualised")
+
+    if bs_parsed and bs_salary > 0 and income > 0:
+        if income > bs_salary * 1.5:
+            flags.append(f"Salary mismatch: declared ₹{income:,.0f}/mo but bank credits show ₹{bs_salary:,.0f}/mo")
+
+    # ── AMB vs Income Mismatch ──────────────────────────────────────────────
+    if amb > 0 and income > 0:
+        # AMB should be at least 1-2 months income for stable borrower
+        if amb < income * 0.3 and income > 50000:
+            flags.append(f"Very low AMB (₹{amb:,.0f}) relative to declared income (₹{income:,.0f}/mo) — possible income overstatement")
+
+    if bs_parsed and bs_amb > 0 and amb > 0:
+        if abs(bs_amb - amb) / max(amb, 1) > 0.5:
+            flags.append(f"AMB discrepancy: declared ₹{amb:,.0f} vs bank statement shows ₹{bs_amb:,.0f}")
+
+    # ── Hidden EMI Detection ────────────────────────────────────────────────
+    if bs_parsed and bs_emi_debits > 0 and existing_emi > 0:
+        if bs_emi_debits > existing_emi * 1.5:
+            flags.append(f"Undisclosed EMIs: bank statement shows ₹{bs_emi_debits:,.0f}/mo EMI debits vs declared ₹{existing_emi:,.0f}/mo")
+    elif bs_parsed and bs_emi_debits > 0 and existing_emi == 0:
+        if bs_emi_debits > 5000:
+            flags.append(f"Undisclosed EMIs: bank statement shows ₹{bs_emi_debits:,.0f}/mo EMI debits but applicant declared none")
+
+    # ── Unusual Credit Patterns ─────────────────────────────────────────────
+    if bs_parsed and large_credits >= 3:
+        flags.append(f"{large_credits} large one-time credits in bank statement — verify source, possible window dressing")
+
+    # ── Credit Hunger Pattern ───────────────────────────────────────────────
+    if enquiries_6m >= 8:
+        flags.append(f"Extreme credit hunger: {enquiries_6m} bureau enquiries in 6 months — possible multiple simultaneous applications")
+    elif enquiries_6m >= 5 and (dpd_30 > 0 or bounce_count > 0):
+        flags.append(f"Credit hunger + stress signals: {enquiries_6m} enquiries with existing delinquencies")
+
+    # ── Bounce Escalation ───────────────────────────────────────────────────
+    if bs_parsed and bs_bounce > bounce_count + 2:
+        flags.append(f"Bounce underreporting: declared {bounce_count} bounces but bank statement shows {bs_bounce}")
+
+    # ── Loan Amount vs Income Ratio ─────────────────────────────────────────
+    if income > 0 and loan_amount > income * 60:
+        flags.append(f"Loan amount (₹{loan_amount:,.0f}) is {loan_amount/income:.0f}x monthly income — extremely high leverage")
+
+    # ── Rapid CIBIL + Behaviour Mismatch ───────────────────────────────────
+    if cibil_score >= 750 and dpd_90 > 0:
+        flags.append("CIBIL score inconsistent with 90+ DPD history — verify bureau report authenticity")
+
+    if cibil_score >= 780 and wo:
+        flags.append("High CIBIL score with write-off history — possible stale or manipulated bureau data")
+
+    # ── First-time Borrower with High Loan ─────────────────────────────────
+    if vintage == 0 and loan_amount > 500000:
+        flags.append(f"First-time borrower requesting ₹{loan_amount:,.0f} with zero credit history — verify income thoroughly")
+
+    # ── GST vs Income Mismatch for Business ────────────────────────────────
+    if "business" in emp_type.lower() or "self-employed" in emp_type.lower():
+        if gst_turnover > 0 and income > 0:
+            implied_monthly = gst_turnover / 12
+            if income > implied_monthly * 0.5:
+                flags.append(f"High income-to-turnover ratio: declared ₹{income:,.0f}/mo income from ₹{gst_turnover/12:,.0f}/mo GST turnover")
+
+    return flags
+
+
 # ── REST API — for LMS / MuleSoft integration ─────────────────────────────────
 @app.post("/api/v1/analyze")
 @limiter.limit("20/minute")
@@ -718,7 +901,25 @@ def _run_analysis(body: dict, user: dict) -> dict:
     loan_purpose  = str(body.get("loan_purpose", "")).strip()[:300]
     collateral_value = float(body.get("collateral_value", 0))
     business_vintage_yrs = float(body.get("business_vintage_yrs", 0))
-    cibil_pdf_parsed = bool(body.get("cibil_pdf_parsed", False))
+    cibil_pdf_parsed    = bool(body.get("cibil_pdf_parsed", False))
+    bank_stmt_parsed    = bool(body.get("bank_statement_parsed", False))
+    bs_salary_amount    = float(body.get("bs_salary_amount", 0))
+    bs_avg_balance      = float(body.get("bs_avg_monthly_balance", 0))
+    bs_bounce_count     = int(body.get("bs_bounce_count", 0))
+    bs_emi_debits       = float(body.get("bs_emi_debits_detected", 0))
+    bs_large_credits    = int(body.get("bs_large_unusual_credits", 0))
+    bs_cd_ratio         = float(body.get("bs_credit_debit_ratio", 0) or 0)
+    bs_stmt_months      = int(body.get("bs_statement_months", 0))
+    bs_upi_credits      = float(body.get("bs_upi_credits_monthly_avg", 0))
+
+    # Bank statement overrides manual inputs when available
+    if bank_stmt_parsed:
+        if bs_avg_balance > 0:
+            avg_monthly_balance = bs_avg_balance
+        if bs_bounce_count > bounce_count_6m:
+            bounce_count_6m = bs_bounce_count
+        if bs_emi_debits > existing_emi_total:
+            existing_emi_total = bs_emi_debits
 
     if loan_type not in LOAN_RULES:
         return {"error": "Invalid loan type."}
@@ -758,6 +959,23 @@ def _run_analysis(body: dict, user: dict) -> dict:
     }
     policy_violations = run_policy_gate(gate_data, rules)
 
+    # Fraud engine
+    fraud_gate_data = {
+        "monthly_income": monthly_income, "avg_monthly_balance": avg_monthly_balance,
+        "itr_income": itr_income, "gst_turnover": gst_turnover,
+        "loan_amount": loan_amount, "cibil_score": cibil_score,
+        "enquiries_6m": enquiries_6m, "bounce_count_6m": bounce_count_6m,
+        "employment_type": employment_type, "employer_name": employer_name,
+        "loan_purpose": loan_purpose, "dpd_30_count": dpd_30_count,
+        "dpd_90_count": dpd_90_count, "writeoff_settled": wo_bool,
+        "credit_vintage_yrs": credit_vintage_yrs, "existing_emi_total": existing_emi_total,
+        "bank_statement_parsed": bank_stmt_parsed,
+        "bs_salary_amount": bs_salary_amount, "bs_avg_monthly_balance": bs_avg_balance,
+        "bs_bounce_count": bs_bounce_count, "bs_emi_debits_detected": bs_emi_debits,
+        "bs_large_unusual_credits": bs_large_credits,
+    }
+    pre_fraud_flags = run_fraud_gate(fraud_gate_data)
+
     app_id = generate_app_id()
 
     if policy_violations:
@@ -766,19 +984,20 @@ def _run_analysis(body: dict, user: dict) -> dict:
             "risk_level": "HIGH", "risk_score": 95,
             "approved_amount": 0, "recommended_interest_rate": 0,
             "processing_fee": 0, "max_eligible_tenure": 0,
-            "fraud_flags": [], "regulatory_flags": [],
+            "fraud_flags": pre_fraud_flags, "regulatory_flags": [],
             "bureau_assessment": f"CIBIL {cibil_score}. DPD 90+: {dpd_90_count}. Enquiries 6m: {enquiries_6m}.",
-            "cashflow_assessment": f"FOIR: {foir}%. AMB: Rs {avg_monthly_balance:,.0f}. Bounces: {bounce_count_6m}.",
+            "cashflow_assessment": f"FOIR: {foir}%. AMB: Rs {avg_monthly_balance:,.0f}. Bounces: {bounce_count_6m}.{'  [Bank statement verified]' if bank_stmt_parsed else ''}",
             "strengths": [], "concerns": policy_violations,
             "policy_violations": policy_violations,
             "reason": "Declined at policy screening. Hard rules triggered: " + " | ".join(policy_violations),
-            "recommendation": "Resolve policy violations before reapplying.",
+            "recommendation": "Resolve policy violations before reapplying." + (f" Note: {len(pre_fraud_flags)} fraud signals detected — investigate before any reconsideration." if pre_fraud_flags else ""),
             "documentation_required": rules["docs"],
             "counter_offer": None,
             "loan_type": loan_type, "applicant_name": full_name,
             "loan_amount": loan_amount, "emi_estimate": round(emi),
             "foir": foir, "ltv": ltv, "computed_rate": computed_rate,
             "cibil_pdf_parsed": cibil_pdf_parsed,
+            "bank_statement_parsed": bank_stmt_parsed,
         }
         _save(result, age, employment_type, employer_name, loan_tenure, cibil_score,
               monthly_income, itr_income, gst_turnover, dpd_30_count, dpd_60_count,
@@ -791,6 +1010,24 @@ def _run_analysis(body: dict, user: dict) -> dict:
         btr = f"{round((avg_monthly_balance * 12) / gst_turnover * 100, 1)}%"
 
     bureau_source = "CIBIL report PDF (auto-extracted)" if cibil_pdf_parsed else "manually entered"
+    bs_source     = "Bank statement PDF (auto-extracted)" if bank_stmt_parsed else "manually entered"
+
+    bs_section = ""
+    if bank_stmt_parsed:
+        bs_section = f"""
+BANK STATEMENT ANALYSIS ({bs_source}, {bs_stmt_months} months):
+- Avg monthly balance: Rs {bs_avg_balance:,.0f} | Credit/Debit ratio: {bs_cd_ratio}
+- Salary credit detected: Rs {bs_salary_amount:,.0f}/mo {'[MATCHES DECLARED]' if abs(bs_salary_amount - monthly_income) < monthly_income * 0.2 else '[MISMATCH WITH DECLARED]'}
+- EMI debits detected: Rs {bs_emi_debits:,.0f}/mo across estimated {body.get('bs_emi_accounts_count',0)} accounts
+- Bounces (outward): {bs_bounce_count} | UPI/NEFT business credits: Rs {bs_upi_credits:,.0f}/mo avg
+- Unusual large credits: {bs_large_credits} instances {'[VERIFY SOURCE]' if bs_large_credits >= 3 else ''}"""
+
+    fraud_section = ""
+    if pre_fraud_flags:
+        fraud_section = f"""
+⚠️ PRE-SCREENING FRAUD FLAGS (rule-based engine — {len(pre_fraud_flags)} flag(s)):
+{chr(10).join('- ' + f for f in pre_fraud_flags)}
+These flags were generated before AI analysis. You MUST address each one in your assessment."""
 
     prompt = f"""You are a Senior Credit Manager at a leading Indian NBFC with 15+ years experience.
 You follow RBI Master Directions and produce structured credit assessments like real banks do.
@@ -807,21 +1044,21 @@ INCOME & CASHFLOW:
 - Declared monthly income: Rs {monthly_income:,.0f} | Expenses: Rs {monthly_expenses:,.0f} | Net disposable: Rs {net_income:,.0f}
 - ITR income (annual): Rs {itr_income:,.0f} {('[INCOME GAP: ' + income_gap + ']') if income_gap else ''}
 - GST turnover (annual): Rs {gst_turnover:,.0f} | Banking turnover ratio: {btr}
-- Avg monthly bank balance: Rs {avg_monthly_balance:,.0f}
+- Avg monthly bank balance: Rs {avg_monthly_balance:,.0f}{'  [from bank statement]' if bank_stmt_parsed else ''}
 - Salary/credit regularity: {'Regular' if sal_reg_bool else 'IRREGULAR'}
 - Cheque/ECS bounces (6m): {bounce_count_6m} {'[CAUTION]' if bounce_count_6m > 1 else ''}
-
+{bs_section}
 BUREAU ({bureau_source}):
 - CIBIL: {cibil_score} | Credit vintage: {credit_vintage_yrs}y | Secured/unsecured mix: {secured_unsecured_ratio or 'N/A'}
 - DPD 30+: {dpd_30_count} | DPD 60+: {dpd_60_count} | DPD 90+: {dpd_90_count}
 - Write-off/settlement: {'YES' if wo_bool else 'None'} | Enquiries (6m): {enquiries_6m} {'[HIGH]' if enquiries_6m > 3 else ''}
-- Existing EMI obligations: Rs {existing_emi_total:,.0f}/month
+- Existing EMI obligations: Rs {existing_emi_total:,.0f}/month{'  [detected from bank statement]' if bank_stmt_parsed and bs_emi_debits > 0 else ''}
 
 LOAN REQUEST:
 - Amount: Rs {loan_amount:,.0f} | Tenure: {loan_tenure}m | Purpose: {loan_purpose}
 - EMI estimate: Rs {emi:,.0f} | FOIR post-EMI: {foir}% {'[EXCEEDS LIMIT]' if foir > rules['max_foir'] else '[OK]'}
 - Collateral: Rs {collateral_value:,.0f} | LTV: {str(ltv)+'%' if ltv else 'N/A'} {'[LTV BREACH]' if ltv_breach else ''}
-
+{fraud_section}
 Respond ONLY with this JSON (no other text):
 {{
   "decision": "APPROVED" or "REJECTED" or "CONDITIONAL",
@@ -831,14 +1068,14 @@ Respond ONLY with this JSON (no other text):
   "recommended_interest_rate": {computed_rate},
   "processing_fee": <rupee amount>,
   "max_eligible_tenure": <months>,
-  "fraud_flags": [],
+  "fraud_flags": {json.dumps(pre_fraud_flags)},
   "regulatory_flags": [],
   "bureau_assessment": "<2-3 sentences on bureau quality>",
-  "cashflow_assessment": "<2-3 sentences on income, banking, FOIR>",
+  "cashflow_assessment": "<2-3 sentences on income, banking, FOIR — mention bank statement verification if present>",
   "strengths": ["s1","s2","s3"],
   "concerns": ["c1","c2"],
   "policy_violations": [],
-  "reason": "<3-4 plain English sentences covering all key factors>",
+  "reason": "<3-4 plain English sentences covering all key factors including any fraud flags>",
   "recommendation": "<specific action for credit committee or processing officer>",
   "counter_offer": "<if REJECTED: what amount/tenure/conditions would work, or null>",
   "documentation_required": {json.dumps(rules['docs'])}
@@ -865,6 +1102,8 @@ Respond ONLY with this JSON (no other text):
         "emi_estimate": round(emi), "foir": foir,
         "ltv": ltv, "computed_rate": computed_rate, "policy_violations": [],
         "cibil_pdf_parsed": cibil_pdf_parsed,
+        "bank_statement_parsed": bank_stmt_parsed,
+        "fraud_flags": result.get("fraud_flags", pre_fraud_flags),
     })
     _save(result, age, employment_type, employer_name, loan_tenure, cibil_score,
           monthly_income, itr_income, gst_turnover, dpd_30_count, dpd_60_count,
