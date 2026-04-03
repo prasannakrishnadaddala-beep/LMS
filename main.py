@@ -204,6 +204,8 @@ def init_db():
                 age                    INTEGER,
                 employment_type        VARCHAR(60),
                 employer_name          VARCHAR(100),
+                employment_source      VARCHAR(20)   DEFAULT 'MANUAL',
+                income_source          VARCHAR(20)   DEFAULT 'MANUAL',
                 loan_type              VARCHAR(60),
                 loan_amount            NUMERIC(15,2),
                 loan_tenure            INTEGER,
@@ -222,6 +224,7 @@ def init_db():
                 policy_violations      TEXT          DEFAULT '[]',
                 risk_level             VARCHAR(10),
                 risk_score             INTEGER,
+                confidence_score       INTEGER       DEFAULT 0,
                 approved_amount        NUMERIC(15,2),
                 interest_rate          NUMERIC(5,2),
                 foir                   NUMERIC(5,1),
@@ -235,14 +238,31 @@ def init_db():
                 reason                 TEXT,
                 recommendation         TEXT,
                 counter_offer          TEXT,
+                redecision_hints       TEXT,
                 bureau_assessment      TEXT,
                 cashflow_assessment    TEXT,
                 created_by             VARCHAR(50),
                 bank_name              VARCHAR(100),
                 cibil_pdf_parsed       BOOLEAN       DEFAULT FALSE,
+                bank_stmt_parsed       BOOLEAN       DEFAULT FALSE,
+                payslip_pdf_parsed     BOOLEAN       DEFAULT FALSE,
                 created_at             TIMESTAMPTZ   DEFAULT NOW()
             )
         """)
+
+        # Add new columns to existing tables (idempotent)
+        for col_sql in [
+            "ALTER TABLE loan_applications ADD COLUMN IF NOT EXISTS employment_source VARCHAR(20) DEFAULT 'MANUAL'",
+            "ALTER TABLE loan_applications ADD COLUMN IF NOT EXISTS income_source VARCHAR(20) DEFAULT 'MANUAL'",
+            "ALTER TABLE loan_applications ADD COLUMN IF NOT EXISTS confidence_score INTEGER DEFAULT 0",
+            "ALTER TABLE loan_applications ADD COLUMN IF NOT EXISTS redecision_hints TEXT",
+            "ALTER TABLE loan_applications ADD COLUMN IF NOT EXISTS bank_stmt_parsed BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE loan_applications ADD COLUMN IF NOT EXISTS payslip_pdf_parsed BOOLEAN DEFAULT FALSE",
+        ]:
+            try:
+                _run_ddl(conn, col_sql)
+            except Exception:
+                pass  # Column may already exist
 
         # Seed admin user if not exists
         existing = conn.run(
@@ -764,6 +784,195 @@ Return ONLY valid JSON — no explanation, no markdown, no preamble:
         return JSONResponse({"error": "PDF parsing failed. Please try again."}, status_code=500)
 
 
+# ── Payslip PDF Parser ──────────────────────────────────────────────────────────
+@app.post("/parse-payslip")
+@limiter.limit("5/minute")
+async def parse_payslip_endpoint(
+    request: Request,
+    session: str  = Cookie(default=None),
+    file: UploadFile = File(...),
+    pdf_password: str = Form(""),
+):
+    user = verify_session(session)
+    if not user:
+        return JSONResponse({"error": "Session expired. Please log in again."}, status_code=401)
+
+    fname = (file.filename or "").lower()
+    if not fname.endswith(".pdf"):
+        return JSONResponse({"error": "Please upload a payslip PDF file."}, status_code=400)
+
+    content = await file.read()
+    if len(content) > 15 * 1024 * 1024:
+        return JSONResponse({"error": "PDF too large. Maximum size is 15 MB."}, status_code=400)
+    if len(content) < 200:
+        return JSONResponse({"error": "PDF appears to be empty or corrupted."}, status_code=400)
+
+    try:
+        content = decrypt_pdf(content, pdf_password.strip())
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
+
+    b64 = base64.standard_b64encode(content).decode("utf-8")
+
+    extraction_prompt = """You are an expert Indian payslip / salary slip analysis system for NBFC credit underwriting.
+Carefully parse this payslip or salary slip and extract all available data points.
+This is the MOST AUTHORITATIVE source for employment and income verification.
+
+Return ONLY valid JSON — no explanation, no markdown, no preamble:
+{
+  "employee_name": <full name exactly as printed on payslip, or "">,
+  "employee_id": <employee ID/code if visible, or "">,
+  "employer_name": <company/employer name exactly as printed (usually at top of payslip), or "">,
+  "employer_pan": <employer PAN if visible, or "">,
+  "designation": <job title/role/designation, or "">,
+  "department": <department/division if visible, or "">,
+  "employment_type": <infer — one of: "Salaried — Private Sector" | "Salaried — Government / PSU" | "Self-Employed Professional" | ""  — use Govt/PSU if payslip is from government/PSU/defence/railway/bank>,
+  "pay_period": <month and year e.g. "March 2025", or "">,
+  "gross_salary": <gross monthly salary in rupees (before deductions), default 0>,
+  "net_salary": <net take-home salary in rupees (after all deductions), this is MOST IMPORTANT — default 0>,
+  "basic_salary": <basic salary component in rupees, default 0>,
+  "hra": <House Rent Allowance in rupees, default 0>,
+  "special_allowance": <special/other allowances combined, default 0>,
+  "pf_deduction": <PF/EPF employee contribution in rupees, default 0>,
+  "tds_deduction": <TDS/income tax deduction in rupees, default 0>,
+  "professional_tax": <professional tax, default 0>,
+  "total_deductions": <total of all deductions, default 0>,
+  "uan_number": <UAN/PF account number if visible, or "">,
+  "pan_number": <employee PAN if visible (may be masked), or "">,
+  "bank_account_last4": <last 4 digits of salary bank account if visible, or "">,
+  "months_count": <number of payslips if multiple months uploaded, default 1>,
+  "extraction_notes": <string max 200 chars — key observations like "Government payslip", "Multiple months", "CTC breakdown visible", "Contractual employee">
+}"""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1200,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": b64,
+                        }
+                    },
+                    {"type": "text", "text": extraction_prompt}
+                ]
+            }]
+        )
+        raw    = message.content[0].text.strip()
+        raw    = raw.replace("```json", "").replace("```", "").strip()
+        result = json.loads(raw)
+        logger.info(f"Payslip parsed by {user['username']}: employer={result.get('employer_name','')} net=₹{result.get('net_salary')}")
+        return JSONResponse(content={"ok": True, "data": result})
+    except json.JSONDecodeError as e:
+        logger.error(f"Payslip JSON parse error: {e}")
+        return JSONResponse({"error": "Could not extract structured data from this payslip. Ensure it is a valid salary slip PDF."}, status_code=422)
+    except Exception as e:
+        logger.error(f"Payslip parse exception: {e}")
+        return JSONResponse({"error": "PDF parsing failed. Please try again."}, status_code=500)
+
+
+# ── Document Source Priority Engine ───────────────────────────────────────────
+def resolve_employment_source(body: dict) -> dict:
+    """
+    Priority: Payslip (authoritative) > Bank Statement (inferred) > CIBIL (inferential) > Manual
+    """
+    ps_parsed    = bool(body.get("payslip_pdf_parsed", False))
+    bs_parsed    = bool(body.get("bank_statement_parsed", False))
+    cibil_parsed = bool(body.get("cibil_pdf_parsed", False))
+
+    # Priority 1: Payslip — most authoritative (actual employer document)
+    if ps_parsed and body.get("ps_employer_name", "").strip():
+        emp_type = body.get("ps_employment_type") or body.get("employment_type", "")
+        return {
+            "employment_type": emp_type,
+            "employer_name":   body.get("ps_employer_name", ""),
+            "source":          "PAYSLIP",
+            "source_label":    "✅ Verified from Payslip",
+            "is_verified":     True,
+        }
+
+    # Priority 2: Bank statement — salary credits confirm salaried status
+    if bs_parsed and float(body.get("bs_salary_amount", 0)) > 0:
+        return {
+            "employment_type": body.get("employment_type") or "Salaried — Private Sector",
+            "employer_name":   body.get("employer_name", ""),
+            "source":          "BANK",
+            "source_label":    "✅ Salary Pattern Verified via Bank Statement",
+            "is_verified":     True,
+        }
+
+    # Priority 3: CIBIL — inferential only (credit accounts, not employer contract)
+    if cibil_parsed:
+        return {
+            "employment_type": body.get("employment_type", ""),
+            "employer_name":   body.get("employer_name", ""),
+            "source":          "CIBIL",
+            "source_label":    "⚠️ Employment inferred from CIBIL (unverified — payslip recommended)",
+            "is_verified":     False,
+        }
+
+    # Manual entry
+    return {
+        "employment_type": body.get("employment_type", ""),
+        "employer_name":   body.get("employer_name", ""),
+        "source":          "MANUAL",
+        "source_label":    "📝 Manually entered — not document-verified",
+        "is_verified":     False,
+    }
+
+
+def resolve_income_source(body: dict) -> dict:
+    """
+    Priority: Payslip net salary > Bank salary credits > ITR/12 > Manual declared
+    """
+    ps_net    = float(body.get("ps_net_salary", 0))
+    bs_salary = float(body.get("bs_salary_amount", 0))
+    declared  = float(body.get("monthly_income", 0))
+    itr_ann   = float(body.get("itr_income", 0))
+
+    if bool(body.get("payslip_pdf_parsed")) and ps_net > 0:
+        return {
+            "monthly_income":  ps_net,
+            "gross_salary":    float(body.get("ps_gross_salary", ps_net)),
+            "source":          "PAYSLIP",
+            "declared":        declared,
+            "variance_pct":    round(abs(ps_net - declared) / declared * 100, 1) if declared > 0 else 0,
+        }
+
+    if bool(body.get("bank_statement_parsed")) and bs_salary > 0:
+        return {
+            "monthly_income":  bs_salary,
+            "gross_salary":    bs_salary,
+            "source":          "BANK",
+            "declared":        declared,
+            "variance_pct":    round(abs(bs_salary - declared) / declared * 100, 1) if declared > 0 else 0,
+        }
+
+    if itr_ann > 0:
+        itr_monthly = round(itr_ann / 12)
+        return {
+            "monthly_income":  declared,   # use declared but flag ITR
+            "gross_salary":    declared,
+            "source":          "ITR",
+            "declared":        declared,
+            "itr_monthly":     itr_monthly,
+            "variance_pct":    round(abs(itr_monthly - declared) / declared * 100, 1) if declared > 0 else 0,
+        }
+
+    return {
+        "monthly_income":  declared,
+        "gross_salary":    declared,
+        "source":          "MANUAL",
+        "declared":        declared,
+        "variance_pct":    0,
+    }
+
+
 # ── Fraud Rule Engine ──────────────────────────────────────────────────────────
 def run_fraud_gate(data: dict) -> list:
     """
@@ -920,6 +1129,14 @@ def analyze_loan(
     collateral_value:     float = Form(0),
     business_vintage_yrs: float = Form(0),
     cibil_pdf_parsed:     str   = Form("no"),
+    # Payslip fields
+    payslip_pdf_parsed:   str   = Form("no"),
+    ps_employer_name:     str   = Form(""),
+    ps_employment_type:   str   = Form(""),
+    ps_net_salary:        float = Form(0),
+    ps_gross_salary:      float = Form(0),
+    ps_employee_name:     str   = Form(""),
+    ps_designation:       str   = Form(""),
 ):
     user = verify_session(session)
     if not user:
@@ -942,6 +1159,13 @@ def analyze_loan(
         "loan_purpose": loan_purpose, "collateral_value": collateral_value,
         "business_vintage_yrs": business_vintage_yrs,
         "cibil_pdf_parsed": cibil_pdf_parsed.lower() in ("yes","true","1"),
+        "payslip_pdf_parsed": payslip_pdf_parsed.lower() in ("yes","true","1"),
+        "ps_employer_name": ps_employer_name.strip()[:100],
+        "ps_employment_type": ps_employment_type,
+        "ps_net_salary": ps_net_salary,
+        "ps_gross_salary": ps_gross_salary,
+        "ps_employee_name": ps_employee_name.strip()[:100],
+        "ps_designation": ps_designation.strip()[:100],
     }
     result = _run_analysis(body, user)
     return JSONResponse(content=result)
@@ -977,6 +1201,7 @@ def _run_analysis(body: dict, user: dict) -> dict:
     business_vintage_yrs = float(body.get("business_vintage_yrs", 0))
     cibil_pdf_parsed    = bool(body.get("cibil_pdf_parsed", False))
     bank_stmt_parsed    = bool(body.get("bank_statement_parsed", False))
+    payslip_pdf_parsed  = bool(body.get("payslip_pdf_parsed", False))
     bs_salary_amount    = float(body.get("bs_salary_amount", 0))
     bs_avg_balance      = float(body.get("bs_avg_monthly_balance", 0))
     bs_bounce_count     = int(body.get("bs_bounce_count", 0))
@@ -985,8 +1210,34 @@ def _run_analysis(body: dict, user: dict) -> dict:
     bs_cd_ratio         = float(body.get("bs_credit_debit_ratio", 0) or 0)
     bs_stmt_months      = int(body.get("bs_statement_months", 0))
     bs_upi_credits      = float(body.get("bs_upi_credits_monthly_avg", 0))
+    # Payslip fields
+    ps_employer_name    = str(body.get("ps_employer_name", "")).strip()
+    ps_employment_type  = str(body.get("ps_employment_type", "")).strip()
+    ps_net_salary       = float(body.get("ps_net_salary", 0))
+    ps_gross_salary     = float(body.get("ps_gross_salary", 0))
+    ps_employee_name    = str(body.get("ps_employee_name", "")).strip()
+    ps_designation      = str(body.get("ps_designation", "")).strip()
 
-    # Bank statement overrides manual inputs when available
+    # ── Document Source Priority Engine ───────────────────────────────────────
+    emp_resolved    = resolve_employment_source(body)
+    income_resolved = resolve_income_source(body)
+
+    # Override employment_type and employer_name with priority-resolved values
+    employment_type = emp_resolved["employment_type"] or employment_type
+    employer_name   = emp_resolved["employer_name"]   or employer_name
+    emp_source      = emp_resolved["source"]
+    emp_source_lbl  = emp_resolved["source_label"]
+
+    # Override monthly_income with priority-resolved value (payslip net salary wins)
+    verified_income = income_resolved["monthly_income"]
+    income_source   = income_resolved["source"]
+    income_variance = income_resolved.get("variance_pct", 0)
+
+    # Use verified income for FOIR calculation (more accurate)
+    if income_resolved["source"] in ("PAYSLIP", "BANK") and verified_income > 0:
+        monthly_income = verified_income
+
+    # Bank statement overrides manual inputs when available (but NOT over payslip)
     if bank_stmt_parsed:
         if bs_avg_balance > 0:
             avg_monthly_balance = bs_avg_balance
@@ -1076,7 +1327,8 @@ def _run_analysis(body: dict, user: dict) -> dict:
         _save(result, age, employment_type, employer_name, loan_tenure, cibil_score,
               monthly_income, itr_income, gst_turnover, dpd_30_count, dpd_60_count,
               dpd_90_count, enquiries_6m, credit_vintage_yrs, avg_monthly_balance,
-              bounce_count_6m, ltv, user, cibil_pdf_parsed)
+              bounce_count_6m, ltv, user, cibil_pdf_parsed,
+              bank_stmt_parsed, payslip_pdf_parsed, emp_source, income_source)
         return result
 
     btr = "N/A"
@@ -1085,6 +1337,30 @@ def _run_analysis(body: dict, user: dict) -> dict:
 
     bureau_source = "CIBIL report PDF (auto-extracted)" if cibil_pdf_parsed else "manually entered"
     bs_source     = "Bank statement PDF (auto-extracted)" if bank_stmt_parsed else "manually entered"
+
+    # Payslip section for AI prompt
+    payslip_section = ""
+    if payslip_pdf_parsed and ps_net_salary > 0:
+        income_match = ""
+        if monthly_expenses > 0:
+            diff_pct = abs(ps_net_salary - income_resolved["declared"]) / max(income_resolved["declared"], 1) * 100
+            income_match = f"[MATCHES DECLARED ✅]" if diff_pct < 15 else f"[MISMATCH with declared ₹{income_resolved['declared']:,.0f} — {diff_pct:.0f}% difference ⚠️]"
+        payslip_section = f"""
+PAYSLIP VERIFICATION (HIGHEST PRIORITY — authoritative employer/income proof):
+- Employer (from payslip): {ps_employer_name or 'Extracted'} | Designation: {ps_designation or 'N/A'}
+- Employment type (payslip): {ps_employment_type or employment_type}
+- Net take-home salary: ₹{ps_net_salary:,.0f}/mo {income_match}
+- Gross salary: ₹{ps_gross_salary:,.0f}/mo
+- Employee name on payslip: {ps_employee_name or 'N/A'}
+⚡ USE PAYSLIP as primary source for employer and income — override CIBIL inferences."""
+
+    # Income source summary for prompt
+    income_source_note = {
+        "PAYSLIP": f"₹{verified_income:,.0f}/mo [SOURCE: PAYSLIP ✅ highest reliability]",
+        "BANK":    f"₹{verified_income:,.0f}/mo [SOURCE: Bank statement credits ✅]",
+        "ITR":     f"₹{monthly_income:,.0f}/mo declared [ITR annualised: ₹{income_resolved.get('itr_monthly',0):,.0f}/mo]",
+        "MANUAL":  f"₹{monthly_income:,.0f}/mo [SOURCE: Manual entry — unverified]",
+    }.get(income_source, f"₹{monthly_income:,.0f}/mo")
 
     bs_section = ""
     if bank_stmt_parsed:
@@ -1105,20 +1381,30 @@ These flags were generated before AI analysis. You MUST address each one in your
 
     prompt = f"""You are a Senior Credit Manager at a leading Indian NBFC with 15+ years experience.
 You follow RBI Master Directions and produce structured credit assessments like real banks do.
-Bureau data source: {bureau_source}
 
+⚡ DOCUMENT PRIORITY RULES (follow strictly):
+1. Payslip = HIGHEST authority for employment type, employer name, and income
+2. Bank statement = SECONDARY authority (salary credits, cash flow patterns)
+3. CIBIL = TERTIARY (credit history only — NOT authoritative for employment/income)
+4. Manual entry = LOWEST priority — treat as unverified unless supported by documents
+
+Employment source: {emp_source_lbl}
+Income source: {income_source}
+Bureau data: {bureau_source}
+{payslip_section}
 LOAN: {loan_type} | Rate range: {rules['rate_range'][0]}%-{rules['rate_range'][1]}% | Risk-computed rate: {computed_rate}%
 Policy: Max FOIR {rules['max_foir']}% | Min CIBIL {rules['min_cibil'] if rules['min_cibil'] > 0 else 'N/A'} | Max LTV {max_ltv}% | Max Tenure {rules['max_tenure']}m | Priority Sector: {'YES' if rules['priority_sector'] else 'NO'}
 Underwriting note: {rules['key_check']}
 
 APPLICANT: {full_name}, Age {age}, {employment_type}
-Employer: {employer_name or 'Not specified'} | Employer vintage: {employer_vintage_yrs}y | Business vintage: {business_vintage_yrs}y {'[BELOW 2yr min for BL]' if loan_type == 'Business Loan' and business_vintage_yrs < 2 else ''}
+Employer: {employer_name or 'Not specified'} | Designation: {ps_designation or 'N/A'} | Employer vintage: {employer_vintage_yrs}y | Business vintage: {business_vintage_yrs}y {'[BELOW 2yr min for BL]' if loan_type == 'Business Loan' and business_vintage_yrs < 2 else ''}
 
-INCOME & CASHFLOW:
-- Declared monthly income: Rs {monthly_income:,.0f} | Expenses: Rs {monthly_expenses:,.0f} | Net disposable: Rs {net_income:,.0f}
-- ITR income (annual): Rs {itr_income:,.0f} {('[INCOME GAP: ' + income_gap + ']') if income_gap else ''}
-- GST turnover (annual): Rs {gst_turnover:,.0f} | Banking turnover ratio: {btr}
-- Avg monthly bank balance: Rs {avg_monthly_balance:,.0f}{'  [from bank statement]' if bank_stmt_parsed else ''}
+INCOME & CASHFLOW (source-verified):
+- Income: {income_source_note}
+- Declared monthly income: ₹{income_resolved['declared']:,.0f} | Expenses: ₹{monthly_expenses:,.0f} | Net disposable: ₹{net_income:,.0f}
+- ITR income (annual): ₹{itr_income:,.0f} {('[INCOME GAP: ' + income_gap + ']') if income_gap else ''}
+- GST turnover (annual): ₹{gst_turnover:,.0f} | Banking turnover ratio: {btr}
+- Avg monthly bank balance: ₹{avg_monthly_balance:,.0f}{'  [from bank statement ✅]' if bank_stmt_parsed else ''}
 - Salary/credit regularity: {'Regular' if sal_reg_bool else 'IRREGULAR'}
 - Cheque/ECS bounces (6m): {bounce_count_6m} {'[CAUTION]' if bounce_count_6m > 1 else ''}
 {bs_section}
@@ -1126,18 +1412,20 @@ BUREAU ({bureau_source}):
 - CIBIL: {cibil_score} | Credit vintage: {credit_vintage_yrs}y | Secured/unsecured mix: {secured_unsecured_ratio or 'N/A'}
 - DPD 30+: {dpd_30_count} | DPD 60+: {dpd_60_count} | DPD 90+: {dpd_90_count}
 - Write-off/settlement: {'YES' if wo_bool else 'None'} | Enquiries (6m): {enquiries_6m} {'[HIGH]' if enquiries_6m > 3 else ''}
-- Existing EMI obligations: Rs {existing_emi_total:,.0f}/month{'  [detected from bank statement]' if bank_stmt_parsed and bs_emi_debits > 0 else ''}
+- Existing EMI obligations: ₹{existing_emi_total:,.0f}/month{'  [detected from bank statement ✅]' if bank_stmt_parsed and bs_emi_debits > 0 else ''}
 
 LOAN REQUEST:
-- Amount: Rs {loan_amount:,.0f} | Tenure: {loan_tenure}m | Purpose: {loan_purpose}
-- EMI estimate: Rs {emi:,.0f} | FOIR post-EMI: {foir}% {'[EXCEEDS LIMIT]' if foir > rules['max_foir'] else '[OK]'}
-- Collateral: Rs {collateral_value:,.0f} | LTV: {str(ltv)+'%' if ltv else 'N/A'} {'[LTV BREACH]' if ltv_breach else ''}
+- Amount: ₹{loan_amount:,.0f} | Tenure: {loan_tenure}m | Purpose: {loan_purpose}
+- EMI estimate: ₹{emi:,.0f} | FOIR post-EMI: {foir}% {'[EXCEEDS LIMIT]' if foir > rules['max_foir'] else '[OK]'}
+- Collateral: ₹{collateral_value:,.0f} | LTV: {str(ltv)+'%' if ltv else 'N/A'} {'[LTV BREACH]' if ltv_breach else ''}
+- Documents verified: {'Payslip ✅' if payslip_pdf_parsed else ''} {'Bank Stmt ✅' if bank_stmt_parsed else ''} {'CIBIL PDF ✅' if cibil_pdf_parsed else ''}
 {fraud_section}
 Respond ONLY with this JSON (no other text):
 {{
   "decision": "APPROVED" or "REJECTED" or "CONDITIONAL",
   "risk_level": "LOW" or "MEDIUM" or "HIGH",
   "risk_score": <0-100>,
+  "confidence_score": <0-100, higher when more documents verified — payslip+bank+cibil = 95+, only manual = 40-60>,
   "approved_amount": <number or 0>,
   "recommended_interest_rate": {computed_rate},
   "processing_fee": <rupee amount>,
@@ -1145,13 +1433,14 @@ Respond ONLY with this JSON (no other text):
   "fraud_flags": {json.dumps(pre_fraud_flags)},
   "regulatory_flags": [],
   "bureau_assessment": "<2-3 sentences on bureau quality>",
-  "cashflow_assessment": "<2-3 sentences on income, banking, FOIR — mention bank statement verification if present>",
+  "cashflow_assessment": "<2-3 sentences on income, banking, FOIR — mention document sources explicitly>",
   "strengths": ["s1","s2","s3"],
   "concerns": ["c1","c2"],
   "policy_violations": [],
-  "reason": "<3-4 plain English sentences covering all key factors including any fraud flags>",
-  "recommendation": "<specific action for credit committee or processing officer>",
+  "reason": "<3-4 plain English sentences — explicitly mention which documents were used and their reliability>",
+  "recommendation": "<specific action for credit committee — mention document source quality>",
   "counter_offer": "<if REJECTED: what amount/tenure/conditions would work, or null>",
+  "redecision_hints": "<if REJECTED: 2-3 specific actions applicant can take to qualify e.g. 'Upload 3 payslips', 'Reduce EMI by closing X loan', 'Add co-applicant', or null if approved>",
   "documentation_required": {json.dumps(rules['docs'])}
 }}"""
 
@@ -1177,17 +1466,25 @@ Respond ONLY with this JSON (no other text):
         "ltv": ltv, "computed_rate": computed_rate, "policy_violations": [],
         "cibil_pdf_parsed": cibil_pdf_parsed,
         "bank_statement_parsed": bank_stmt_parsed,
+        "payslip_pdf_parsed": payslip_pdf_parsed,
+        "employment_source": emp_source,
+        "income_source": income_source,
+        "confidence_score": result.get("confidence_score", 0),
         "fraud_flags": result.get("fraud_flags", pre_fraud_flags),
+        "redecision_hints": result.get("redecision_hints"),
     })
     _save(result, age, employment_type, employer_name, loan_tenure, cibil_score,
           monthly_income, itr_income, gst_turnover, dpd_30_count, dpd_60_count,
           dpd_90_count, enquiries_6m, credit_vintage_yrs, avg_monthly_balance,
-          bounce_count_6m, ltv, user, cibil_pdf_parsed)
+          bounce_count_6m, ltv, user, cibil_pdf_parsed,
+          bank_stmt_parsed, payslip_pdf_parsed, emp_source, income_source)
     return result
 
 
 def _save(result, age, emp, employer, tenure, cibil, income, itr, gst,
-          dpd30, dpd60, dpd90, enq, vintage, amb, bounce, ltv, user, cibil_pdf_parsed):
+          dpd30, dpd60, dpd90, enq, vintage, amb, bounce, ltv, user,
+          cibil_pdf_parsed, bank_stmt_parsed=False, payslip_pdf_parsed=False,
+          emp_source="MANUAL", income_source="MANUAL"):
     if not DATABASE_URL:
         return
     try:
@@ -1195,31 +1492,34 @@ def _save(result, age, emp, employer, tenure, cibil, income, itr, gst,
         conn.run("""
             INSERT INTO loan_applications (
                 application_id, applicant_name, age, employment_type, employer_name,
+                employment_source, income_source,
                 loan_type, loan_amount, loan_tenure, cibil_score,
                 dpd_30_count, dpd_60_count, dpd_90_count, enquiries_6m,
                 credit_vintage_yrs, avg_monthly_balance, bounce_count_6m,
                 monthly_income, itr_income, gst_turnover,
-                decision, policy_violations, risk_level, risk_score,
+                decision, policy_violations, risk_level, risk_score, confidence_score,
                 approved_amount, interest_rate, foir, ltv, emi_estimate,
                 fraud_flags, regulatory_flags, strengths, concerns,
                 documentation_required, reason, recommendation,
-                counter_offer, bureau_assessment, cashflow_assessment,
-                created_by, bank_name, cibil_pdf_parsed
+                counter_offer, redecision_hints, bureau_assessment, cashflow_assessment,
+                created_by, bank_name, cibil_pdf_parsed, bank_stmt_parsed, payslip_pdf_parsed
             ) VALUES (
                 :app_id, :name, :age, :emp, :employer,
+                :emp_source, :income_source,
                 :lt, :la, :tenure, :cibil,
                 :dpd30, :dpd60, :dpd90, :enq,
                 :vintage, :amb, :bounce,
                 :income, :itr, :gst,
-                :decision, :pviol, :risk, :score,
+                :decision, :pviol, :risk, :score, :confidence,
                 :approved, :rate, :foir, :ltv, :emi,
                 :fraud, :reg, :strengths, :concerns,
-                :docs, :reason, :rec, :counter, :bureau, :cashflow,
-                :created_by, :bank_name, :cpdf
+                :docs, :reason, :rec, :counter, :redecision, :bureau, :cashflow,
+                :created_by, :bank_name, :cpdf, :bspdf, :pspdf
             )
         """,
             app_id=result["application_id"], name=result["applicant_name"],
             age=age, emp=emp, employer=employer,
+            emp_source=emp_source, income_source=income_source,
             lt=result["loan_type"], la=result["loan_amount"],
             tenure=tenure, cibil=cibil,
             dpd30=dpd30, dpd60=dpd60, dpd90=dpd90, enq=enq,
@@ -1228,6 +1528,7 @@ def _save(result, age, emp, employer, tenure, cibil, income, itr, gst,
             decision=result.get("decision"),
             pviol=json.dumps(result.get("policy_violations", [])),
             risk=result.get("risk_level"), score=result.get("risk_score"),
+            confidence=result.get("confidence_score", 0),
             approved=result.get("approved_amount", 0),
             rate=result.get("recommended_interest_rate"),
             foir=result.get("foir"), ltv=ltv, emi=result.get("emi_estimate"),
@@ -1238,14 +1539,17 @@ def _save(result, age, emp, employer, tenure, cibil, income, itr, gst,
             docs=json.dumps(result.get("documentation_required", [])),
             reason=result.get("reason"), rec=result.get("recommendation"),
             counter=result.get("counter_offer"),
+            redecision=result.get("redecision_hints"),
             bureau=result.get("bureau_assessment"),
             cashflow=result.get("cashflow_assessment"),
             created_by=user.get("username", "api"),
             bank_name=user.get("bank_name", ""),
             cpdf=cibil_pdf_parsed,
+            bspdf=bank_stmt_parsed,
+            pspdf=payslip_pdf_parsed,
         )
         conn.close()
-        logger.info(f"✅ Saved {result['application_id']} by {user.get('username')}")
+        logger.info(f"✅ Saved {result['application_id']} by {user.get('username')} [emp_src={emp_source} inc_src={income_source}]")
     except Exception as e:
         logger.error(f"❌ DB save: {e}")
 
@@ -1262,7 +1566,10 @@ def health():
         "service": "NBFC AI Platform v4.0",
         "loan_types": len(LOAN_RULES),
         "database": "connected" if db_ok else "not connected",
-        "features": ["CIBIL PDF parsing", "Multi-user", "Multi-bank", "REST API", "Risk-based pricing"]
+        "features": ["Payslip PDF parsing", "CIBIL PDF parsing", "Bank statement PDF parsing",
+                     "Document priority engine (Payslip>Bank>CIBIL)", "Multi-user", "Multi-bank",
+                     "REST API", "Risk-based pricing", "Fraud detection", "Source-verified decisions",
+                     "Confidence scoring", "Re-decision hints"]
     }
 
 if __name__ == "__main__":
