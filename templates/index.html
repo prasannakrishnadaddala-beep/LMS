@@ -1097,11 +1097,11 @@ async function uploadPayslip() {
   document.getElementById('psParsing').style.display = 'block';
 
   const fd = new FormData();
-  fd.append('file', file);
-  fd.append('pdf_password', document.getElementById('psPasswordInput').value || '');
+  fd.append('payslip_file', file);
+  fd.append('payslip_password', _pendingPasswords.payslip);
 
   try {
-    const res  = await fetch('/parse-payslip', { method: 'POST', body: fd });
+    const res  = await fetch('/parse-documents', { method: 'POST', body: fd });
     const json = await res.json();
     document.getElementById('psParsing').style.display = 'none';
     if (!res.ok || json.error) {
@@ -1114,7 +1114,12 @@ async function uploadPayslip() {
       }
       return;
     }
-    autofillPayslip(json.data);
+    if (json.data?.payslip) {
+      autofillPayslip(json.data.payslip);
+      _clearPending('payslip');
+    } else {
+      showPsError('Could not extract payslip data from this PDF.');
+    }
   } catch(err) {
     document.getElementById('psParsing').style.display = 'none';
     showPsError('Network error. Please try again.');
@@ -1312,7 +1317,6 @@ function cibilFileSelected(file) {
 }
 
 async function uploadCibil() {
-  // Keep password in sync for batch parse too
   _pendingPasswords.cibil = (document.getElementById('cibilPasswordInput')?.value || '');
   const file = _cibilPendingFile;
   if (!file) return;
@@ -1323,17 +1327,16 @@ async function uploadCibil() {
   document.getElementById('cibilParsing').style.display  = 'block';
 
   const fd = new FormData();
-  fd.append('file', file);
-  fd.append('pdf_password', document.getElementById('cibilPasswordInput').value || '');
+  fd.append('cibil_file', file);
+  fd.append('cibil_password', _pendingPasswords.cibil);
 
   try {
-    const res  = await fetch('/parse-cibil', { method: 'POST', body: fd });
+    const res  = await fetch('/parse-documents', { method: 'POST', body: fd });
     const json = await res.json();
 
     document.getElementById('cibilParsing').style.display = 'none';
 
     if (!res.ok || json.error) {
-      // If password error, show pending state again so user can re-enter password
       if (json.error && json.error.toLowerCase().includes('password')) {
         document.getElementById('cibilPending').classList.add('visible');
         document.getElementById('cibilPasswordInput').style.borderColor = '#ef4444';
@@ -1344,7 +1347,12 @@ async function uploadCibil() {
       return;
     }
 
-    autofillBureau(json.data);
+    if (json.data?.cibil) {
+      autofillBureau(json.data.cibil);
+      _clearPending('cibil');
+    } else {
+      showCibilError('Could not extract CIBIL data from this PDF.');
+    }
   } catch(err) {
     document.getElementById('cibilParsing').style.display = 'none';
     showCibilError('Network error. Please try again.');
@@ -1744,11 +1752,11 @@ async function uploadBankStmt() {
   document.getElementById('bsParsing').style.display     = 'block';
 
   const fd = new FormData();
-  fd.append('file', file);
-  fd.append('pdf_password', document.getElementById('bsPasswordInput').value || '');
+  fd.append('bank_file', file);
+  fd.append('bank_password', _pendingPasswords.bank);
 
   try {
-    const res  = await fetch('/parse-bank-statement', { method: 'POST', body: fd });
+    const res  = await fetch('/parse-documents', { method: 'POST', body: fd });
     const json = await res.json();
     document.getElementById('bsParsing').style.display = 'none';
     if (!res.ok || json.error) {
@@ -1761,136 +1769,17 @@ async function uploadBankStmt() {
       }
       return;
     }
-    autofillBankStmt(json.data);
+    if (json.data?.bank) {
+      autofillBankStmt(json.data.bank);
+      _clearPending('bank');
+    } else {
+      showBsError('Could not extract bank statement data from this PDF.');
+    }
   } catch(err) {
     document.getElementById('bsParsing').style.display = 'none';
     showBsError('Network error. Please try again.');
   }
 }
-
-function autofillBankStmt(d) {
-  // Set hidden inputs
-  document.getElementById('bsParsedInput').value    = 'yes';
-  document.getElementById('bsSalaryInput').value    = d.salary_amount || 0;
-  document.getElementById('bsAmbInput').value       = d.avg_monthly_balance || 0;
-  document.getElementById('bsBounceInput').value    = d.outward_cheque_returns || d.bounce_count || 0;
-  document.getElementById('bsEmiInput').value       = d.emi_debits_detected || 0;
-  document.getElementById('bsLargeCredInput').value = d.large_unusual_credits || 0;
-  document.getElementById('bsCdRatioInput').value   = d.credit_debit_ratio || 0;
-  document.getElementById('bsMonthsInput').value    = d.statement_months || 0;
-  document.getElementById('bsUpiInput').value       = d.upi_credits_monthly_avg || 0;
-  document.getElementById('bsEmiCountInput').value  = d.emi_accounts_count || 0;
-
-  // ── Auto-fill APPLICANT PROFILE from bank statement (if not already filled) ──
-  const nameField = document.getElementById('f_full_name');
-  if (nameField && d.account_holder && !nameField.value.trim()) {
-    nameField.value = d.account_holder;
-    nameField.classList.add('auto-filled');
-    markAutoTag('tag_full_name', true);
-  }
-
-  // Store for cross-check
-  window._bsExtractedName = (d.account_holder || '').trim().toLowerCase();
-
-  // ── Auto-fill visible financial form fields ──────────────────────────────
-  const amb = d.avg_monthly_balance;
-  if (amb > 0) {
-    const ambField = document.querySelector('[name=avg_monthly_balance]');
-    if (ambField) { ambField.value = Math.round(amb); ambField.classList.add('auto-filled'); }
-  }
-  const bounce = d.outward_cheque_returns || d.bounce_count || 0;
-  if (bounce > 0) {
-    const bounceField = document.querySelector('[name=bounce_count_6m]');
-    if (bounceField) { bounceField.value = bounce; bounceField.classList.add('auto-filled'); }
-  }
-  const emi = d.emi_debits_detected || 0;
-  if (emi > 0) {
-    const emiField = document.querySelector('[name=existing_emi_total]');
-    if (emiField && parseFloat(emiField.value || 0) < emi) {
-      emiField.value = Math.round(emi); emiField.classList.add('auto-filled');
-    }
-  }
-  // Salary autofill if income not entered yet
-  if (d.salary_amount > 0) {
-    const incomeField = document.querySelector('[name=monthly_income]');
-    if (incomeField && !incomeField.value) {
-      incomeField.value = Math.round(d.salary_amount);
-      incomeField.classList.add('auto-filled');
-    }
-  }
-  // Expenses autofill from avg monthly debit (proxy for total outflows)
-  if (d.avg_monthly_debit > 0) {
-    const expField = document.querySelector('[name=monthly_expenses]');
-    if (expField && !expField.value) {
-      // Use avg_monthly_debit minus detected EMIs as living expenses estimate
-      const emiDebits = d.emi_debits_detected || 0;
-      const estimatedExpenses = Math.max(0, Math.round(d.avg_monthly_debit - emiDebits));
-      if (estimatedExpenses > 0) {
-        expField.value = estimatedExpenses;
-        expField.classList.add('auto-filled');
-      }
-    }
-  }
-  if (d.salary_credit_regular === false) {
-    document.getElementById('scr_no').checked = true;
-  } else if (d.salary_credit_regular === true) {
-    document.getElementById('scr_yes').checked = true;
-  }
-
-  // ── Build metrics display ────────────────────────────────────────────────
-  const fmt = n => '₹' + Number(n||0).toLocaleString('en-IN');
-  const metrics = [
-    { val: fmt(d.avg_monthly_balance), lbl: 'Avg Balance' },
-    { val: fmt(d.avg_monthly_credit),  lbl: 'Avg Monthly Credits' },
-    { val: fmt(d.emi_debits_detected), lbl: 'EMI Debits Detected' },
-    { val: (d.outward_cheque_returns || d.bounce_count || 0) + ' bounces', lbl: 'Cheque Returns' },
-    { val: (d.statement_months || '?') + ' months', lbl: 'Statement Period' },
-    { val: d.credit_debit_ratio ? d.credit_debit_ratio + 'x' : '—', lbl: 'Credit/Debit Ratio' },
-  ];
-  document.getElementById('bsMetrics').innerHTML = metrics.map(m =>
-    `<div class="bs-metric"><div class="bm-val">${m.val}</div><div class="bm-lbl">${m.lbl}</div></div>`
-  ).join('');
-
-  // ── Chips ────────────────────────────────────────────────────────────────
-  const chips = [];
-  if (d.account_holder) chips.push({ text: `👤 ${d.account_holder}`, cls:'ok' });
-  if (d.bank_name) chips.push({ text: `🏦 ${d.bank_name}`, cls:'ok' });
-  if (d.account_type) chips.push({ text: d.account_type + ' A/C', cls:'ok' });
-
-  const declIncome = parseFloat(document.querySelector('[name=monthly_income]')?.value || 0);
-  const bsSalary   = d.salary_amount || 0;
-  if (bsSalary > 0 && declIncome > 0) {
-    if (Math.abs(bsSalary - declIncome) / declIncome < 0.2)
-      chips.push({ text: `Salary verified ₹${Math.round(bsSalary/1000)}K`, cls:'ok' });
-    else
-      chips.push({ text: `Salary mismatch: stmt ₹${Math.round(bsSalary/1000)}K vs declared ₹${Math.round(declIncome/1000)}K`, cls:'warn' });
-  }
-  if (d.salary_credit_regular === true)  chips.push({ text:'Regular salary credits', cls:'ok' });
-  if (d.salary_credit_regular === false) chips.push({ text:'Irregular salary credits', cls:'warn' });
-  const bnc = d.outward_cheque_returns || d.bounce_count || 0;
-  if (bnc === 0)  chips.push({ text:'0 cheque returns', cls:'ok' });
-  else if (bnc <= 2) chips.push({ text: bnc + ' cheque return(s)', cls:'warn' });
-  else chips.push({ text: bnc + ' cheque returns', cls:'bad' });
-  if (d.emi_accounts_count > 0) chips.push({ text: d.emi_accounts_count + ' EMI account(s) detected', cls:'warn' });
-  if (d.large_unusual_credits >= 3) chips.push({ text: d.large_unusual_credits + ' unusual large credits', cls:'warn' });
-  const cdr = d.credit_debit_ratio || 0;
-  if (cdr >= 1.3) chips.push({ text:'Healthy cash surplus', cls:'ok' });
-  else if (cdr >= 1.0) chips.push({ text:'Balanced cash flow', cls:'ok' });
-  else if (cdr > 0) chips.push({ text:'Cash flow stress detected', cls:'bad' });
-
-  document.getElementById('bsChips').innerHTML =
-    chips.map(c => `<span class="bs-chip ${c.cls}">${c.text}</span>`).join('');
-
-  if (d.extraction_notes)
-    document.getElementById('bsNotes').textContent = '📝 ' + d.extraction_notes;
-
-  document.getElementById('bsResult').style.display = 'block';
-
-  // ── Cross-document checks ────────────────────────────────────────────────
-  checkNameMismatch();
-  checkCrossDocFraud(d, declIncome);
-}
-
 
 // ── PARSE ALL DOCUMENTS — 1 API call for up to 3 docs ────────────────────────
 // Tracks pending (uploaded but not yet parsed) files per doc type
@@ -1954,23 +1843,23 @@ async function parseAllDocuments() {
 
     const d = json.data;
 
-    // Apply CIBIL results (reuse existing processCibilResult if available)
-    if (d.cibil && typeof processCibilResult === 'function') {
-      processCibilResult(d.cibil);
+    // Apply CIBIL results
+    if (d.cibil) {
+      autofillBureau(d.cibil);
       _clearPending('cibil');
       document.getElementById('cibilParsing').style.display = 'none';
     }
 
     // Apply bank statement results
-    if (d.bank && typeof processBankStatement === 'function') {
-      processBankStatement(d.bank);
+    if (d.bank) {
+      autofillBankStmt(d.bank);
       _clearPending('bank');
       document.getElementById('bsParsing').style.display = 'none';
     }
 
     // Apply payslip results
-    if (d.payslip && typeof processPayslipResult === 'function') {
-      processPayslipResult(d.payslip);
+    if (d.payslip) {
+      autofillPayslip(d.payslip);
       _clearPending('payslip');
       document.getElementById('psParsing').style.display = 'none';
     }
