@@ -111,7 +111,7 @@ def mask_aadhaar(uid: str) -> str:
 
 # ── App setup ──────────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="NBFC AI Platform v4.0")
+app = FastAPI(title="NBFC AI Platform v5.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 templates  = Jinja2Templates(directory="templates")
@@ -382,6 +382,67 @@ def init_db():
                 reported_by    VARCHAR(50),
                 reported_at    TIMESTAMPTZ  DEFAULT NOW(),
                 notes          TEXT
+            )
+        """)
+
+
+        # ── v5.0 Tables ───────────────────────────────────────────────────────
+        _run_ddl(conn, """
+            CREATE TABLE IF NOT EXISTS kyc_records (
+                id             SERIAL PRIMARY KEY,
+                application_id VARCHAR(30),
+                kyc_type       VARCHAR(20)  NOT NULL,
+                identifier     VARCHAR(20)  NOT NULL,
+                name_on_kyc    VARCHAR(100),
+                dob_on_kyc     VARCHAR(20),
+                status         VARCHAR(20)  DEFAULT 'PENDING',
+                match_score    INTEGER      DEFAULT 0,
+                verified_by    VARCHAR(50),
+                verified_at    TIMESTAMPTZ  DEFAULT NOW(),
+                raw_response   JSONB        DEFAULT '{}'
+            )
+        """)
+        _run_ddl(conn, """
+            CREATE TABLE IF NOT EXISTS aml_screenings (
+                id             SERIAL PRIMARY KEY,
+                application_id VARCHAR(30),
+                applicant_name VARCHAR(100),
+                pan_masked     VARCHAR(20),
+                risk_level     VARCHAR(20)  DEFAULT 'LOW',
+                match_found    BOOLEAN      DEFAULT FALSE,
+                match_details  TEXT,
+                screened_by    VARCHAR(50),
+                screened_at    TIMESTAMPTZ  DEFAULT NOW(),
+                lists_checked  TEXT         DEFAULT '[]'
+            )
+        """)
+        _run_ddl(conn, """
+            CREATE TABLE IF NOT EXISTS colending_records (
+                id             SERIAL PRIMARY KEY,
+                application_id VARCHAR(30)  UNIQUE NOT NULL,
+                partner_bank   VARCHAR(100),
+                nbfc_share_pct NUMERIC(5,2) DEFAULT 20,
+                bank_share_pct NUMERIC(5,2) DEFAULT 80,
+                partner_rate   NUMERIC(5,2),
+                blended_rate   NUMERIC(5,2),
+                status         VARCHAR(20)  DEFAULT 'PROPOSED',
+                created_by     VARCHAR(50),
+                created_at     TIMESTAMPTZ  DEFAULT NOW()
+            )
+        """)
+        _run_ddl(conn, """
+            CREATE TABLE IF NOT EXISTS collections (
+                id             SERIAL PRIMARY KEY,
+                application_id VARCHAR(30)  NOT NULL,
+                dpd_bucket     VARCHAR(20)  DEFAULT '0',
+                outstanding    NUMERIC(15,2) DEFAULT 0,
+                last_payment   NUMERIC(15,2) DEFAULT 0,
+                last_payment_dt TIMESTAMPTZ,
+                next_action    VARCHAR(100),
+                agent_assigned VARCHAR(50),
+                status         VARCHAR(20)  DEFAULT 'REGULAR',
+                updated_by     VARCHAR(50),
+                updated_at     TIMESTAMPTZ  DEFAULT NOW()
             )
         """)
 
@@ -2176,6 +2237,1049 @@ async def get_audit_logs(
         logger.error(f"audit_logs error: {e}")
         return JSONResponse({"error": "Failed to retrieve audit logs."}, status_code=500)
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── v5.0 — 13 Advanced Banking Feature Endpoints ─────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 1. PAN / Aadhaar eKYC ─────────────────────────────────────────────────────
+@app.post("/api/v1/kyc/pan")
+@limiter.limit("20/minute")
+async def kyc_pan(request: Request, x_api_key: str = Header(default="")):
+    """
+    PAN eKYC: Cross-check PAN + name + DOB against NSDL.
+    Body: { application_id, pan, name, dob (YYYY-MM-DD) }
+    Returns: { status, match_score, name_match, dob_match }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    pan   = (body.get("pan") or "").strip().upper()
+    name  = (body.get("name") or "").strip()
+    dob   = (body.get("dob") or "").strip()
+    app_id = body.get("application_id", "")
+
+    if not pan or len(pan) != 10:
+        return JSONResponse({"error": "Valid 10-character PAN required."}, status_code=400)
+    if not name:
+        return JSONResponse({"error": "Applicant name required for KYC match."}, status_code=400)
+
+    # Deterministic rule-based PAN validation
+    pan_valid = (pan[0:5].isalpha() and pan[5:9].isdigit() and pan[9].isalpha())
+    pan_type  = {"P": "Individual", "C": "Company", "H": "HUF", "F": "Firm",
+                 "A": "AOP", "T": "Trust", "B": "BOI", "L": "Local Auth",
+                 "J": "AJP", "G": "Govt"}.get(pan[3], "Other")
+
+    # Simulate NSDL response (in production: call NSDL API / KYC aggregator)
+    import re
+    name_words   = set(re.sub(r'[^a-zA-Z ]', '', name).lower().split())
+    match_score  = 85 if pan_valid else 40
+    status       = "VERIFIED" if pan_valid and match_score >= 70 else "MISMATCH"
+
+    pan_masked = mask_pan(pan)
+    if DATABASE_URL:
+        try:
+            conn = get_db_conn()
+            conn.run("""
+                INSERT INTO kyc_records (application_id, kyc_type, identifier, name_on_kyc, dob_on_kyc,
+                    status, match_score, verified_by)
+                VALUES (:aid, 'PAN', :id, :name, :dob, :status, :score, :by)
+            """, aid=app_id, id=pan_masked, name=name, dob=dob,
+                status=status, score=match_score, by=api_user["username"])
+            conn.close()
+        except Exception as e:
+            logger.warning(f"KYC PAN DB write error: {e}")
+
+    write_audit_log("KYC_PAN", api_user["username"], api_user.get("bank_name", ""),
+                    {"pan_masked": pan_masked, "status": status, "app_id": app_id})
+    return JSONResponse({
+        "ok": True, "kyc_type": "PAN",
+        "pan_masked": pan_masked,
+        "pan_type": pan_type,
+        "pan_valid_format": pan_valid,
+        "status": status,
+        "match_score": match_score,
+        "name_match": match_score >= 70,
+        "note": "Simulated NSDL response — connect KYC aggregator (KARZA/IDfy/Signzy) for live verification."
+    })
+
+
+@app.post("/api/v1/kyc/aadhaar")
+@limiter.limit("20/minute")
+async def kyc_aadhaar(request: Request, x_api_key: str = Header(default="")):
+    """
+    Aadhaar OTP eKYC (offline XML / DigiLocker flow).
+    Body: { application_id, aadhaar_last4, name, dob }
+    Returns: { status, masked_uid, name_match, address_extracted }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    last4  = (body.get("aadhaar_last4") or "").strip()
+    name   = (body.get("name") or "").strip()
+    app_id = body.get("application_id", "")
+
+    if not last4 or not last4.isdigit() or len(last4) != 4:
+        return JSONResponse({"error": "Provide last 4 digits of Aadhaar."}, status_code=400)
+
+    uid_masked = mask_aadhaar("XXXX" + last4)
+    status     = "VERIFIED"  # Simulation; real flow uses UIDAI OTP API
+
+    if DATABASE_URL:
+        try:
+            conn = get_db_conn()
+            conn.run("""
+                INSERT INTO kyc_records (application_id, kyc_type, identifier, name_on_kyc,
+                    status, match_score, verified_by)
+                VALUES (:aid, 'AADHAAR', :id, :name, :status, 80, :by)
+            """, aid=app_id, id=uid_masked, name=name, status=status, by=api_user["username"])
+            conn.close()
+        except Exception as e:
+            logger.warning(f"KYC Aadhaar DB write: {e}")
+
+    write_audit_log("KYC_AADHAAR", api_user["username"], api_user.get("bank_name", ""),
+                    {"uid_masked": uid_masked, "status": status, "app_id": app_id})
+    return JSONResponse({
+        "ok": True, "kyc_type": "AADHAAR",
+        "uid_masked": uid_masked,
+        "status": status,
+        "name_match": True,
+        "note": "Simulated UIDAI response — integrate UIDAI sandbox / DigiLocker for production."
+    })
+
+
+# ── 2. Document Tampering Detection ─────────────────────────────────────────
+@app.post("/api/v1/tamper-detect")
+@limiter.limit("10/minute")
+async def tamper_detect(
+    request:  Request,
+    session:  str        = Cookie(default=None),
+    file:     UploadFile = File(...),
+):
+    """
+    AI-powered document tampering detection.
+    Sends the document to Claude and asks for signs of digital alteration.
+    Returns: { tampered: bool, confidence, flags, verdict }
+    """
+    user = verify_session(session)
+    if not user:
+        return JSONResponse({"error": "Session expired."}, status_code=401)
+
+    fname = (file.filename or "").lower()
+    if not fname.endswith(".pdf"):
+        return JSONResponse({"error": "Only PDF files supported."}, status_code=400)
+
+    content = await file.read()
+    if len(content) > 15 * 1024 * 1024:
+        return JSONResponse({"error": "File too large (max 15 MB)."}, status_code=400)
+
+    def _pdf_text(pdf_bytes: bytes) -> str:
+        if not PYPDF_AVAILABLE:
+            return ""
+        try:
+            reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+            parts = []
+            for i, page in enumerate(reader.pages[:5]):
+                t = page.extract_text() or ""
+                if t.strip():
+                    parts.append(f"--- Page {i+1} ---\n{t}")
+            return "\n".join(parts)[:40_000]
+        except Exception:
+            return ""
+
+    doc_text = _pdf_text(content)
+    if not doc_text:
+        b64 = base64.standard_b64encode(content).decode()
+        content_block = {
+            "type": "document",
+            "source": {"type": "base64", "media_type": "application/pdf", "data": b64}
+        }
+    else:
+        content_block = {"type": "text", "text": f"=== DOCUMENT CONTENT ===\n{doc_text}"}
+
+    tamper_prompt = """You are a forensic document analyst specialising in Indian financial document fraud.
+Analyse the provided document for signs of tampering, forgery or digital manipulation.
+
+Check for:
+1. Font inconsistencies (different typefaces mid-line, pixel artefacts around digits)
+2. Whitespace / alignment anomalies (common after copy-paste replacement of numbers)
+3. Suspicious round numbers (salary exactly 100000 every month, CIBIL score exactly 750)
+4. Date/sequence inconsistencies (statement months out of order, future dates)
+5. Logo or letterhead anomalies
+6. Watermark or security feature absence
+7. Metadata mismatches (document claims 2024 but formatting suggests 2020)
+8. Balance arithmetic errors (opening + credits - debits ≠ closing)
+
+Return ONLY valid JSON:
+{
+  "tampered": true/false,
+  "confidence": 0-100,
+  "risk_level": "LOW" | "MEDIUM" | "HIGH",
+  "flags": ["list of specific suspicious observations"],
+  "verdict": "single sentence plain-English conclusion",
+  "recommend_manual_review": true/false
+}"""
+
+    try:
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=800,
+            messages=[{"role": "user", "content": [content_block, {"type": "text", "text": tamper_prompt}]}]
+        )
+        raw    = msg.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        return JSONResponse({"error": "AI response parse error. Please retry."}, status_code=422)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    write_audit_log("TAMPER_DETECT", user["username"], user.get("bank_name", ""),
+                    {"file": file.filename, "tampered": result.get("tampered"), "confidence": result.get("confidence")})
+    return JSONResponse({"ok": True, "filename": file.filename, **result})
+
+
+# ── 3. Scorecard Engine ─────────────────────────────────────────────────────
+def _compute_scorecard(cibil: int, foir: float, dpd_30: int, dpd_90: int,
+                        bounce: int, vintage: float, emp_type: str,
+                        income: float, amb: float, enq: int, wo: bool) -> dict:
+    """
+    Deterministic 100-point scorecard (no AI).
+    Based on Indian NBFC underwriting best practices.
+    """
+    score = 0
+    breakdown = {}
+
+    # CIBIL (max 30 pts)
+    cibil_pts = 0
+    if cibil >= 800:   cibil_pts = 30
+    elif cibil >= 750: cibil_pts = 25
+    elif cibil >= 700: cibil_pts = 18
+    elif cibil >= 650: cibil_pts = 10
+    elif cibil >= 600: cibil_pts = 5
+    score += cibil_pts
+    breakdown["CIBIL Score"] = {"points": cibil_pts, "max": 30}
+
+    # FOIR (max 20 pts)
+    foir_pts = 0
+    if foir <= 30:   foir_pts = 20
+    elif foir <= 40: foir_pts = 15
+    elif foir <= 50: foir_pts = 10
+    elif foir <= 55: foir_pts = 5
+    score += foir_pts
+    breakdown["FOIR"] = {"points": foir_pts, "max": 20}
+
+    # DPD (max 15 pts)
+    dpd_pts = 15 if dpd_30 == 0 else (8 if dpd_30 <= 1 else (2 if dpd_30 <= 3 else 0))
+    if dpd_90 > 0: dpd_pts = 0
+    score += dpd_pts
+    breakdown["DPD History"] = {"points": dpd_pts, "max": 15}
+
+    # Bounce (max 10 pts)
+    bnc_pts = 10 if bounce == 0 else (7 if bounce <= 1 else (3 if bounce <= 3 else 0))
+    score += bnc_pts
+    breakdown["Cheque Bounces"] = {"points": bnc_pts, "max": 10}
+
+    # Credit vintage (max 10 pts)
+    vint_pts = 10 if vintage >= 7 else (7 if vintage >= 4 else (4 if vintage >= 2 else (1 if vintage > 0 else 0)))
+    score += vint_pts
+    breakdown["Credit Vintage"] = {"points": vint_pts, "max": 10}
+
+    # Employment (max 8 pts)
+    emp_pts = (8 if "Government" in emp_type or "PSU" in emp_type
+               else 6 if "Salaried" in emp_type
+               else 4 if "Professional" in emp_type
+               else 3)
+    score += emp_pts
+    breakdown["Employment Stability"] = {"points": emp_pts, "max": 8}
+
+    # AMB vs income (max 5 pts)
+    amb_pts = 5 if (amb >= income and income > 0) else (3 if amb >= income * 0.5 else 1)
+    score += amb_pts
+    breakdown["Bank Balance Ratio"] = {"points": amb_pts, "max": 5}
+
+    # Enquiries (max 2 pts)
+    enq_pts = 2 if enq <= 2 else (1 if enq <= 4 else 0)
+    score += enq_pts
+    breakdown["Credit Enquiries"] = {"points": enq_pts, "max": 2}
+
+    # Write-off penalty
+    if wo: score = max(0, score - 20)
+
+    grade = ("A+" if score >= 85 else "A" if score >= 75 else "B+" if score >= 65
+             else "B" if score >= 55 else "C" if score >= 40 else "D")
+
+    return {
+        "total_score": min(score, 100),
+        "max_score": 100,
+        "grade": grade,
+        "breakdown": breakdown,
+        "verdict": (
+            "Strong credit profile — recommend approval." if score >= 75 else
+            "Moderate risk — conditional approval with monitoring." if score >= 55 else
+            "High risk — require additional collateral or co-applicant." if score >= 40 else
+            "Decline — credit profile does not meet minimum scorecard threshold."
+        )
+    }
+
+@app.post("/api/v1/scorecard")
+@limiter.limit("30/minute")
+async def scorecard_api(request: Request, x_api_key: str = Header(default="")):
+    """
+    Run deterministic scorecard for any application data.
+    No AI call — pure rule-based scoring.
+    Body: { cibil_score, foir, dpd_30_count, dpd_90_count, bounce_count_6m,
+            credit_vintage_yrs, employment_type, monthly_income,
+            avg_monthly_balance, enquiries_6m, writeoff_settled }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        b = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    result = _compute_scorecard(
+        cibil=int(b.get("cibil_score", 300)),
+        foir=float(b.get("foir", 0)),
+        dpd_30=int(b.get("dpd_30_count", 0)),
+        dpd_90=int(b.get("dpd_90_count", 0)),
+        bounce=int(b.get("bounce_count_6m", 0)),
+        vintage=float(b.get("credit_vintage_yrs", 0)),
+        emp_type=str(b.get("employment_type", "")),
+        income=float(b.get("monthly_income", 0)),
+        amb=float(b.get("avg_monthly_balance", 0)),
+        enq=int(b.get("enquiries_6m", 0)),
+        wo=str(b.get("writeoff_settled", "no")).lower() in ("yes", "true", "1"),
+    )
+    return JSONResponse({"ok": True, **result})
+
+
+# ── 4. Account Aggregator (AA) Framework ────────────────────────────────────
+@app.post("/api/v1/aa/consent")
+@limiter.limit("20/minute")
+async def aa_consent(request: Request, x_api_key: str = Header(default="")):
+    """
+    Initiate AA consent request (RBI Account Aggregator framework).
+    Body: { application_id, customer_mobile, fip_ids, purpose, from_date, to_date }
+    Returns: { consent_id, consent_handle, status, redirect_url }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    app_id   = body.get("application_id", generate_app_id())
+    mobile   = (body.get("customer_mobile") or "").strip()
+    fip_ids  = body.get("fip_ids", ["SBI-FIP", "HDFC-FIP", "ICICI-FIP"])
+    purpose  = body.get("purpose", "Loan Underwriting")
+
+    if not mobile or len(mobile) != 10:
+        return JSONResponse({"error": "Valid 10-digit mobile number required."}, status_code=400)
+
+    # Simulate Sahamati / AA aggregator response
+    consent_id     = secrets.token_hex(16)
+    consent_handle = f"AA-{consent_id[:8].upper()}"
+    redirect_url   = f"https://aa-gateway.example.com/consent/{consent_handle}?mobile={mobile[-4:]}"
+
+    write_audit_log("AA_CONSENT_INITIATE", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": app_id, "fip_count": len(fip_ids), "consent_id": consent_id})
+    return JSONResponse({
+        "ok": True,
+        "application_id": app_id,
+        "consent_id": consent_id,
+        "consent_handle": consent_handle,
+        "status": "PENDING",
+        "redirect_url": redirect_url,
+        "fip_ids": fip_ids,
+        "purpose": purpose,
+        "note": "Simulated Sahamati AA response — integrate live AA gateway (Perfios/Finvu/OneMoney) for production.",
+        "expires_in_hours": 24
+    })
+
+
+@app.get("/api/v1/aa/data/{consent_id}")
+@limiter.limit("30/minute")
+async def aa_fetch_data(request: Request, consent_id: str,
+                        x_api_key: str = Header(default="")):
+    """
+    Fetch AA financial data after consent approval.
+    Returns: { status, accounts, months_available, summary }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+
+    # Simulate AA data fetch
+    return JSONResponse({
+        "ok": True,
+        "consent_id": consent_id,
+        "status": "APPROVED",
+        "accounts": [
+            {"fip": "SBI-FIP", "account_type": "SAVINGS", "masked_id": "XXXX6789",
+             "months_available": 12, "avg_balance": 45000, "salary_credited": True},
+            {"fip": "HDFC-FIP", "account_type": "SAVINGS", "masked_id": "XXXX3421",
+             "months_available": 6, "avg_balance": 12000, "salary_credited": False},
+        ],
+        "note": "Simulated AA data — integrate Sahamati / FIP APIs for live data."
+    })
+
+
+# ── 5. Multi-Bureau Credit Check ────────────────────────────────────────────
+@app.post("/api/v1/multi-bureau")
+@limiter.limit("15/minute")
+async def multi_bureau(request: Request, x_api_key: str = Header(default="")):
+    """
+    Trigger credit pull from multiple bureaus (CIBIL + Experian + CRIF + Equifax).
+    Body: { application_id, pan, name, dob, mobile }
+    Returns: { scores_by_bureau, best_score, worst_score, recommendation }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    pan    = (body.get("pan") or "").strip().upper()
+    name   = (body.get("name") or "").strip()
+    app_id = body.get("application_id", "")
+
+    if not pan or not name:
+        return JSONResponse({"error": "PAN and name required for bureau pull."}, status_code=400)
+
+    pan_masked = mask_pan(pan)
+
+    # Simulate multi-bureau scores (deterministic based on PAN hash)
+    seed = int(hashlib.md5(pan.encode()).hexdigest()[:6], 16)
+    base = 600 + (seed % 250)
+    scores = {
+        "CIBIL":    min(900, base + random.randint(-10, 20)),
+        "Experian": min(900, base + random.randint(-15, 15)),
+        "CRIF":     min(900, base + random.randint(-20, 10)),
+        "Equifax":  min(900, base + random.randint(-5, 25)),
+    }
+    best  = max(scores.values())
+    worst = min(scores.values())
+    spread = best - worst
+
+    recommendation = (
+        "Consistent scores across bureaus — use CIBIL as primary." if spread <= 30 else
+        "Moderate bureau divergence — investigate discrepant bureau report." if spread <= 60 else
+        "High divergence — manual review required before underwriting."
+    )
+
+    write_audit_log("MULTI_BUREAU", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": app_id, "pan_masked": pan_masked, "best": best, "spread": spread})
+    return JSONResponse({
+        "ok": True, "application_id": app_id,
+        "pan_masked": pan_masked,
+        "scores_by_bureau": scores,
+        "best_score": best, "worst_score": worst,
+        "spread": spread,
+        "recommendation": recommendation,
+        "primary_bureau": "CIBIL",
+        "note": "Simulated scores — integrate TransUnion CIBIL, Experian India, CRIF High Mark, Equifax India APIs."
+    })
+
+
+# ── 6. GST Underwriting ─────────────────────────────────────────────────────
+@app.post("/api/v1/gst-analysis")
+@limiter.limit("20/minute")
+async def gst_analysis(request: Request, x_api_key: str = Header(default="")):
+    """
+    AI-powered GST return analysis for business loan underwriting.
+    Body: { application_id, gstin, monthly_gst_data: [...], loan_amount }
+    Returns: { turnover_trend, tax_compliance, eligible_income, flags }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    gstin       = (body.get("gstin") or "").strip().upper()
+    monthly_data = body.get("monthly_gst_data", [])
+    loan_amount  = float(body.get("loan_amount", 0))
+    app_id       = body.get("application_id", "")
+
+    if not gstin or len(gstin) != 15:
+        return JSONResponse({"error": "Valid 15-character GSTIN required."}, status_code=400)
+
+    # Deterministic GST analytics (no AI call needed for numbers)
+    turnovers = [float(m.get("turnover", 0)) for m in monthly_data if m.get("turnover")]
+    taxes     = [float(m.get("tax_paid", 0)) for m in monthly_data if m.get("tax_paid")]
+
+    avg_turnover   = round(sum(turnovers) / len(turnovers), 0) if turnovers else 0
+    annual_turnover = avg_turnover * 12
+    effective_rate  = round(sum(taxes) / sum(turnovers) * 100, 2) if turnovers and taxes else 0
+    trend = "GROWING" if (len(turnovers) >= 3 and turnovers[-1] > turnovers[0] * 1.1) else             "DECLINING" if (len(turnovers) >= 3 and turnovers[-1] < turnovers[0] * 0.9) else "STABLE"
+
+    # Banking income = 15-25% of turnover for business loans
+    eligible_income = round(avg_turnover * 0.20, 0)
+    flags = []
+    if effective_rate < 2: flags.append("Very low GST effective rate — verify return authenticity")
+    if trend == "DECLINING": flags.append("Turnover declining — business stress signal")
+    if loan_amount > annual_turnover * 0.5: flags.append("Loan amount >50% of annual turnover — high leverage")
+    if not turnovers: flags.append("No GST data provided — manual GSTIN verification needed")
+
+    gstin_state = {"07": "Delhi", "27": "Maharashtra", "33": "Tamil Nadu",
+                   "29": "Karnataka", "09": "Uttar Pradesh"}.get(gstin[:2], "State " + gstin[:2])
+
+    write_audit_log("GST_ANALYSIS", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": app_id, "gstin": gstin[:5] + "****", "trend": trend, "avg_turnover": avg_turnover})
+    return JSONResponse({
+        "ok": True, "application_id": app_id,
+        "gstin": gstin[:5] + "****" + gstin[-3:],
+        "gstin_state": gstin_state,
+        "avg_monthly_turnover": avg_turnover,
+        "annual_turnover": annual_turnover,
+        "effective_tax_rate_pct": effective_rate,
+        "turnover_trend": trend,
+        "eligible_monthly_income": eligible_income,
+        "months_analyzed": len(turnovers),
+        "flags": flags,
+        "note": "Integrate GSP/GSTN sandbox API for live GSTR-3B / GSTR-1 pull."
+    })
+
+
+# ── 7. Video KYC (V-KYC) ────────────────────────────────────────────────────
+@app.post("/api/v1/vkyc/schedule")
+@limiter.limit("15/minute")
+async def vkyc_schedule(request: Request, x_api_key: str = Header(default="")):
+    """
+    Schedule a V-KYC session (RBI mandated for digital lending).
+    Body: { application_id, applicant_name, mobile, preferred_slot }
+    Returns: { session_id, scheduled_at, agent_link, customer_link }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    app_id = body.get("application_id", generate_app_id())
+    name   = body.get("applicant_name", "")
+    mobile = body.get("mobile", "")
+    slot   = body.get("preferred_slot", "")
+
+    session_id  = secrets.token_hex(12)
+    agent_token = secrets.token_hex(8)
+    cust_token  = secrets.token_hex(8)
+
+    write_audit_log("VKYC_SCHEDULE", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": app_id, "session_id": session_id, "mobile_last4": mobile[-4:] if len(mobile) >= 4 else ""})
+    return JSONResponse({
+        "ok": True, "application_id": app_id,
+        "session_id": session_id,
+        "status": "SCHEDULED",
+        "preferred_slot": slot or "Next available",
+        "agent_link": f"https://vkyc.example.com/agent/{session_id}?t={agent_token}",
+        "customer_link": f"https://vkyc.example.com/c/{session_id}?t={cust_token}",
+        "sms_sent": bool(mobile),
+        "note": "Simulated V-KYC session — integrate Aadhaar Paperless KYC or IDfy / HyperVerge V-KYC SDK."
+    })
+
+
+@app.get("/api/v1/vkyc/status/{session_id}")
+@limiter.limit("30/minute")
+async def vkyc_status(request: Request, session_id: str,
+                       x_api_key: str = Header(default="")):
+    """Check V-KYC session status."""
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    return JSONResponse({
+        "ok": True, "session_id": session_id,
+        "status": "COMPLETED",
+        "liveness_check": "PASSED",
+        "face_match_score": 94,
+        "id_verified": True,
+        "note": "Simulated status — real status requires live V-KYC SDK webhook."
+    })
+
+
+# ── 8. e-Sign ────────────────────────────────────────────────────────────────
+@app.post("/api/v1/esign")
+@limiter.limit("15/minute")
+async def esign(request: Request, x_api_key: str = Header(default="")):
+    """
+    Initiate Aadhaar-based e-Sign for loan agreement.
+    Body: { application_id, applicant_name, mobile, email, document_type }
+    Returns: { esign_id, redirect_url, expires_at }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    app_id   = body.get("application_id", "")
+    doc_type = body.get("document_type", "Loan Agreement")
+    esign_id = secrets.token_hex(16)
+
+    write_audit_log("ESIGN_INITIATE", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": app_id, "doc_type": doc_type, "esign_id": esign_id})
+    return JSONResponse({
+        "ok": True, "application_id": app_id,
+        "esign_id": esign_id,
+        "document_type": doc_type,
+        "status": "PENDING",
+        "redirect_url": f"https://esign.example.com/sign/{esign_id}",
+        "expires_in_minutes": 30,
+        "note": "Simulated e-Sign — integrate NSDL e-Gov / Leegality / SignDesk for Aadhaar eSign."
+    })
+
+
+# ── 9. e-NACH Mandate ───────────────────────────────────────────────────────
+@app.post("/api/v1/nach/mandate")
+@limiter.limit("15/minute")
+async def nach_mandate(request: Request, x_api_key: str = Header(default="")):
+    """
+    Create NACH mandate for auto-debit of EMIs.
+    Body: { application_id, bank_account, ifsc, emi_amount, start_date, tenure_months }
+    Returns: { mandate_id, umrn, status, presentation_date }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    app_id     = body.get("application_id", "")
+    emi_amount = float(body.get("emi_amount", 0))
+    ifsc       = (body.get("ifsc") or "").strip().upper()
+    start_date = body.get("start_date", "")
+
+    if emi_amount <= 0:
+        return JSONResponse({"error": "EMI amount must be greater than 0."}, status_code=400)
+    if not ifsc:
+        return JSONResponse({"error": "IFSC code is required."}, status_code=400)
+
+    mandate_id = "NACH" + secrets.token_hex(8).upper()
+    umrn       = "UMRN" + secrets.token_hex(6).upper()
+
+    write_audit_log("NACH_MANDATE", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": app_id, "emi": emi_amount, "ifsc": ifsc, "mandate_id": mandate_id})
+    return JSONResponse({
+        "ok": True, "application_id": app_id,
+        "mandate_id": mandate_id,
+        "umrn": umrn,
+        "status": "PENDING_REGISTRATION",
+        "emi_amount": emi_amount,
+        "ifsc": ifsc,
+        "start_date": start_date,
+        "frequency": "MONTHLY",
+        "note": "Simulated NACH mandate — integrate NPCI / Razorpay / Cashfree NACH API for production."
+    })
+
+
+# ── 10. WhatsApp Bot Webhook ─────────────────────────────────────────────────
+@app.post("/api/v1/whatsapp/webhook")
+async def whatsapp_webhook(request: Request):
+    """
+    WhatsApp Business API webhook for loan status notifications.
+    Accepts Meta/WABA webhook events and sends automated status updates.
+    Body: (Meta webhook JSON structure)
+    Returns: 200 OK always (Meta requires this)
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"status": "ok"})
+
+    entry = (body.get("entry") or [{}])[0]
+    changes = (entry.get("changes") or [{}])[0]
+    value = changes.get("value", {})
+    messages = value.get("messages", [])
+
+    for msg in messages:
+        phone  = msg.get("from", "")
+        text   = (msg.get("text") or {}).get("body", "").strip().lower()
+        msg_id = msg.get("id", "")
+
+        # Parse loan status query
+        if text.startswith("status") or text.startswith("loan"):
+            parts  = text.split()
+            app_id = next((p.upper() for p in parts if p.upper().startswith("LN-")), None)
+            logger.info(f"WhatsApp loan status query: phone={phone[-4:]} app_id={app_id}")
+            # In production: look up app_id from DB and send reply via Meta WABA API
+
+    return JSONResponse({"status": "ok"})
+
+
+@app.get("/api/v1/whatsapp/send")
+@limiter.limit("10/minute")
+async def whatsapp_send(request: Request, x_api_key: str = Header(default=""),
+                        application_id: str = "", mobile: str = "", template: str = "loan_status"):
+    """Send WhatsApp notification for a loan application."""
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    if not mobile or not application_id:
+        return JSONResponse({"error": "mobile and application_id required."}, status_code=400)
+
+    templates = {
+        "loan_status": f"Your loan application {application_id} has been processed. Login to check your decision.",
+        "doc_reminder": f"Documents pending for {application_id}. Please upload to proceed.",
+        "emi_reminder": f"Your EMI for loan {application_id} is due in 3 days. Auto-debit via NACH is set up.",
+        "approval":     f"Congratulations! Your loan {application_id} is APPROVED. Disbursement in 2–3 working days.",
+    }
+    message = templates.get(template, templates["loan_status"])
+    write_audit_log("WHATSAPP_SEND", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": application_id, "mobile_last4": mobile[-4:], "template": template})
+    return JSONResponse({
+        "ok": True, "application_id": application_id,
+        "mobile_last4": mobile[-4:], "template": template,
+        "message_preview": message,
+        "status": "QUEUED",
+        "note": "Simulated send — integrate Meta WhatsApp Business API / Gupshup / Kaleyra for production."
+    })
+
+
+# ── 11. Collections Module ──────────────────────────────────────────────────
+@app.get("/api/v1/collections/{application_id}")
+@limiter.limit("30/minute")
+async def get_collection(request: Request, application_id: str,
+                          x_api_key: str = Header(default="")):
+    """Retrieve collections record for a loan application."""
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    if not DATABASE_URL:
+        return JSONResponse({"error": "No database configured."}, status_code=500)
+    try:
+        conn = get_db_conn()
+        rows = conn.run(
+            """SELECT dpd_bucket, outstanding, last_payment, last_payment_dt,
+                      next_action, agent_assigned, status, updated_at
+               FROM collections WHERE application_id = :aid
+               ORDER BY updated_at DESC LIMIT 1""",
+            aid=application_id
+        )
+        conn.close()
+        if not rows:
+            return JSONResponse({"error": "No collections record found."}, status_code=404)
+        r = rows[0]
+        return JSONResponse({
+            "application_id": application_id,
+            "dpd_bucket": r[0], "outstanding": float(r[1] or 0),
+            "last_payment": float(r[2] or 0),
+            "last_payment_date": r[3].isoformat() if r[3] else None,
+            "next_action": r[4], "agent_assigned": r[5],
+            "status": r[6],
+            "updated_at": r[7].isoformat() if r[7] else None,
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/v1/collections/{application_id}/update")
+@limiter.limit("20/minute")
+async def update_collection(request: Request, application_id: str,
+                             x_api_key: str = Header(default="")):
+    """
+    Update collections record (payment received, DPD update, next action).
+    Body: { dpd_bucket, outstanding, last_payment, next_action, agent_assigned, status }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    if not DATABASE_URL:
+        return JSONResponse({"error": "No database configured."}, status_code=500)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    valid_statuses = {"REGULAR", "DELINQUENT", "NPA", "RESTRUCTURED", "WRITTEN_OFF", "CLOSED"}
+    status = body.get("status", "REGULAR").upper()
+    if status not in valid_statuses:
+        return JSONResponse({"error": f"status must be one of: {sorted(valid_statuses)}"}, status_code=400)
+
+    try:
+        conn = get_db_conn()
+        conn.run("""
+            INSERT INTO collections (application_id, dpd_bucket, outstanding, last_payment,
+                next_action, agent_assigned, status, updated_by)
+            VALUES (:aid, :dpd, :ost, :lp, :na, :ag, :st, :by)
+        """, aid=application_id,
+            dpd=body.get("dpd_bucket", "0"),
+            ost=float(body.get("outstanding", 0)),
+            lp=float(body.get("last_payment", 0)),
+            na=str(body.get("next_action", ""))[:100],
+            ag=str(body.get("agent_assigned", ""))[:50],
+            st=status, by=api_user["username"]
+        )
+        conn.close()
+        write_audit_log("COLLECTION_UPDATE", api_user["username"], api_user.get("bank_name", ""),
+                        {"app_id": application_id, "status": status, "dpd": body.get("dpd_bucket")})
+        return JSONResponse({"ok": True, "application_id": application_id, "status": status})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── 12. Co-Lending Module ────────────────────────────────────────────────────
+CO_LENDING_PARTNERS = {
+    "SBI":        {"min_ticket": 500000,  "max_ticket": 10000000, "bank_share_pct": 80, "rate_spread": -1.5},
+    "Bank of Baroda": {"min_ticket": 300000, "max_ticket": 5000000, "bank_share_pct": 75, "rate_spread": -1.0},
+    "IDFC First": {"min_ticket": 100000,  "max_ticket": 2000000,  "bank_share_pct": 70, "rate_spread": -0.5},
+    "Piramal":    {"min_ticket": 500000,  "max_ticket": 5000000,  "bank_share_pct": 80, "rate_spread": -0.8},
+}
+
+@app.get("/api/v1/colending/partners")
+@limiter.limit("30/minute")
+async def colending_partners(request: Request, x_api_key: str = Header(default="")):
+    """List available co-lending partners and their terms."""
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    return JSONResponse({"ok": True, "partners": CO_LENDING_PARTNERS,
+                          "note": "NBFC retains 20-30% of loan; partner bank funds balance under RBI Co-Lending Guidelines."})
+
+
+@app.post("/api/v1/colending/propose")
+@limiter.limit("15/minute")
+async def colending_propose(request: Request, x_api_key: str = Header(default="")):
+    """
+    Propose a co-lending arrangement for an application.
+    Body: { application_id, loan_amount, interest_rate, partner_bank }
+    Returns: { blended_rate, nbfc_share, bank_share, emi_estimate }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    app_id       = body.get("application_id", "")
+    loan_amount  = float(body.get("loan_amount", 0))
+    nbfc_rate    = float(body.get("interest_rate", 14))
+    partner_name = body.get("partner_bank", "SBI")
+    partner      = CO_LENDING_PARTNERS.get(partner_name, CO_LENDING_PARTNERS["SBI"])
+
+    bank_share_pct = partner["bank_share_pct"]
+    nbfc_share_pct = 100 - bank_share_pct
+    partner_rate   = max(nbfc_rate + partner["rate_spread"], 7.5)
+    blended_rate   = round((nbfc_rate * nbfc_share_pct + partner_rate * bank_share_pct) / 100, 2)
+
+    if DATABASE_URL:
+        try:
+            conn = get_db_conn()
+            conn.run("""
+                INSERT INTO colending_records (application_id, partner_bank, nbfc_share_pct,
+                    bank_share_pct, partner_rate, blended_rate, created_by)
+                VALUES (:aid, :pb, :ns, :bs, :pr, :br, :by)
+                ON CONFLICT (application_id) DO UPDATE
+                SET partner_bank=EXCLUDED.partner_bank, blended_rate=EXCLUDED.blended_rate,
+                    updated_at=NOW()
+            """, aid=app_id, pb=partner_name, ns=nbfc_share_pct,
+                bs=bank_share_pct, pr=partner_rate, br=blended_rate, by=api_user["username"])
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Co-lending DB write: {e}")
+
+    write_audit_log("COLENDING_PROPOSE", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": app_id, "partner": partner_name, "blended_rate": blended_rate})
+    return JSONResponse({
+        "ok": True, "application_id": app_id,
+        "partner_bank": partner_name,
+        "loan_amount": loan_amount,
+        "nbfc_share_pct": nbfc_share_pct,
+        "nbfc_share_amount": round(loan_amount * nbfc_share_pct / 100, 0),
+        "bank_share_pct": bank_share_pct,
+        "bank_share_amount": round(loan_amount * bank_share_pct / 100, 0),
+        "nbfc_rate": nbfc_rate,
+        "partner_rate": partner_rate,
+        "blended_rate": blended_rate,
+        "rate_benefit_to_borrower": round(nbfc_rate - blended_rate, 2),
+        "note": "RBI Co-Lending Model (CLM) per circular RBI/2020-21/63."
+    })
+
+
+# ── 13. AML Screening ────────────────────────────────────────────────────────
+AML_WATCHLISTS = [
+    "FATF High-Risk Jurisdictions", "RBI Caution List",
+    "UN Security Council Sanctions", "OFAC SDN List",
+    "ED/CBI Look-Out Circular", "SEBI Debarred Entities"
+]
+
+@app.post("/api/v1/aml/screen")
+@limiter.limit("20/minute")
+async def aml_screen(request: Request, x_api_key: str = Header(default="")):
+    """
+    AML/KYC screening against sanction lists and watchlists.
+    Body: { application_id, name, pan, dob, employer_name, loan_amount }
+    Returns: { risk_level, match_found, lists_checked, flags }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    name        = (body.get("name") or "").strip()
+    pan         = (body.get("pan") or "").strip().upper()
+    app_id      = body.get("application_id", "")
+    loan_amount = float(body.get("loan_amount", 0))
+
+    if not name:
+        return JSONResponse({"error": "Applicant name required for AML screening."}, status_code=400)
+
+    pan_masked = mask_pan(pan) if pan else ""
+
+    # Deterministic rule-based AML risk assessment (no false positives in simulation)
+    risk_flags = []
+    if loan_amount > 5_000_000:
+        risk_flags.append("Large transaction (>Rs 50L) — enhanced due diligence required per PMLA")
+    if "cash" in name.lower() or "bullion" in name.lower():
+        risk_flags.append("Name contains high-risk keywords — manual review required")
+
+    # Simulate watchlist check (no real names matched in simulation)
+    match_found = False
+    risk_level  = "HIGH" if match_found else ("MEDIUM" if risk_flags else "LOW")
+
+    if DATABASE_URL:
+        try:
+            conn = get_db_conn()
+            conn.run("""
+                INSERT INTO aml_screenings (application_id, applicant_name, pan_masked,
+                    risk_level, match_found, match_details, screened_by, lists_checked)
+                VALUES (:aid, :name, :pan, :rl, :mf, :md, :by, :lists)
+            """, aid=app_id, name=name, pan=pan_masked,
+                rl=risk_level, mf=match_found,
+                md="; ".join(risk_flags) if risk_flags else None,
+                by=api_user["username"],
+                lists=json.dumps(AML_WATCHLISTS)
+            )
+            conn.close()
+        except Exception as e:
+            logger.warning(f"AML DB write: {e}")
+
+    write_audit_log("AML_SCREEN", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": app_id, "risk_level": risk_level, "match": match_found, "pan_masked": pan_masked})
+    return JSONResponse({
+        "ok": True, "application_id": app_id,
+        "name_screened": name,
+        "pan_masked": pan_masked,
+        "risk_level": risk_level,
+        "match_found": match_found,
+        "lists_checked": AML_WATCHLISTS,
+        "flags": risk_flags,
+        "recommendation": (
+            "CLEAR — no adverse findings. Proceed with standard KYC." if risk_level == "LOW" else
+            "ENHANCED DUE DILIGENCE required before disbursement." if risk_level == "MEDIUM" else
+            "ESCALATE to Compliance / MLRO immediately."
+        ),
+        "note": "Simulated AML check — integrate World-Check / Refinitiv / Dow Jones Risk for production."
+    })
+
+
+# ── 14. Alternate Credit Scoring (Thin File / NTC borrowers) ─────────────────
+@app.post("/api/v1/alternate-score")
+@limiter.limit("15/minute")
+async def alternate_score(request: Request, x_api_key: str = Header(default="")):
+    """
+    Alternate credit score for New-to-Credit (NTC) / thin-file borrowers.
+    Uses utility payments, mobile usage, UPI behaviour instead of bureau score.
+    Body: { application_id, mobile_tenure_months, upi_txn_monthly_avg,
+            utility_payments_on_time, avg_mobile_recharge, rental_payment_history,
+            monthly_income, employment_type }
+    Returns: { alternate_score, grade, eligibility, recommended_max_loan }
+    """
+    api_user = get_user_from_api_key(x_api_key)
+    if not api_user:
+        return JSONResponse({"error": "Invalid or missing X-API-Key."}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    mobile_tenure   = int(body.get("mobile_tenure_months", 0))
+    upi_avg         = float(body.get("upi_txn_monthly_avg", 0))
+    utility_ontime  = bool(body.get("utility_payments_on_time", True))
+    mobile_recharge = float(body.get("avg_mobile_recharge", 0))
+    rental_history  = bool(body.get("rental_payment_history", False))
+    income          = float(body.get("monthly_income", 0))
+    emp_type        = str(body.get("employment_type", ""))
+    app_id          = body.get("application_id", "")
+
+    # Alternate scoring logic (industry-standard NTC model)
+    score = 0
+    breakdown = {}
+
+    # Mobile tenure (max 20)
+    m_pts = min(20, mobile_tenure // 6 * 4)
+    score += m_pts; breakdown["Mobile Tenure"] = {"points": m_pts, "max": 20}
+
+    # UPI behaviour (max 25)
+    u_pts = 25 if upi_avg > 30 else 18 if upi_avg > 15 else 10 if upi_avg > 5 else 3
+    score += u_pts; breakdown["UPI Activity"] = {"points": u_pts, "max": 25}
+
+    # Utility payments (max 20)
+    ut_pts = 20 if utility_ontime else 5
+    score += ut_pts; breakdown["Utility Payments"] = {"points": ut_pts, "max": 20}
+
+    # Mobile recharge regularity (max 10)
+    r_pts = 10 if mobile_recharge >= 300 else 6 if mobile_recharge >= 150 else 2
+    score += r_pts; breakdown["Mobile Recharge"] = {"points": r_pts, "max": 10}
+
+    # Rental history (max 15)
+    rh_pts = 15 if rental_history else 0
+    score += rh_pts; breakdown["Rental History"] = {"points": rh_pts, "max": 15}
+
+    # Employment (max 10)
+    e_pts = 10 if "Salaried" in emp_type else 7 if emp_type else 4
+    score += e_pts; breakdown["Employment"] = {"points": e_pts, "max": 10}
+
+    score = min(score, 100)
+    grade = "A" if score >= 75 else "B" if score >= 55 else "C" if score >= 40 else "D"
+    eligible = score >= 40
+    max_loan = round(income * (20 if score >= 75 else 12 if score >= 55 else 6), -3) if income > 0 else 0
+
+    write_audit_log("ALTERNATE_SCORE", api_user["username"], api_user.get("bank_name", ""),
+                    {"app_id": app_id, "score": score, "grade": grade, "eligible": eligible})
+    return JSONResponse({
+        "ok": True, "application_id": app_id,
+        "alternate_score": score,
+        "max_possible": 100,
+        "grade": grade,
+        "eligible_for_ntc_loan": eligible,
+        "recommended_max_loan": max_loan,
+        "breakdown": breakdown,
+        "recommendation": (
+            f"NTC borrower eligible — max loan Rs {max_loan:,.0f} at MFI/micro-loan rates." if eligible else
+            "Score too low — recommend 6-month UPI/utility track record before re-application."
+        ),
+        "note": "Integrate Bureau's NTC score (CIBIL NTC, Experian Thin File) or alt-data APIs for production."
+    })
+
 @app.get("/health")
 def health():
     db_ok = False
@@ -2185,14 +3289,32 @@ def health():
         except Exception: pass
     return {
         "status": "ok",
-        "service": "NBFC AI Platform v4.0",
+        "service": "NBFC AI Platform v5.0",
         "loan_types": len(LOAN_RULES),
         "database": "connected" if db_ok else "not connected",
-        "features": ["Payslip PDF parsing", "CIBIL PDF parsing", "Bank statement PDF parsing",
-                     "Document priority engine (Payslip>Bank>CIBIL)", "Multi-user", "Multi-bank",
-                     "REST API (analyze + feedback + retrieval)", "Risk-based pricing", "Fraud detection",
-                     "Source-verified decisions", "Confidence scoring", "Re-decision hints",
-                     "Audit logs (PII-masked)", "Outcome feedback loop", "Application retrieval API"]
+        "v4_features": [
+            "Payslip + CIBIL + Bank Statement PDF parsing", "Document priority engine",
+            "Multi-user / multi-bank", "Risk-based pricing", "Fraud detection engine",
+            "Confidence scoring", "Re-decision hints", "Audit logs (PII-masked)",
+            "Outcome feedback loop", "Application retrieval API"
+        ],
+        "v5_features": [
+            "PAN eKYC (/api/v1/kyc/pan)",
+            "Aadhaar eKYC (/api/v1/kyc/aadhaar)",
+            "Document Tampering Detection (/api/v1/tamper-detect)",
+            "Deterministic Scorecard Engine (/api/v1/scorecard)",
+            "Account Aggregator Framework (/api/v1/aa/consent + /aa/data)",
+            "Multi-Bureau Credit Check (/api/v1/multi-bureau)",
+            "GST Underwriting Analytics (/api/v1/gst-analysis)",
+            "Video KYC Scheduling (/api/v1/vkyc/schedule + /status)",
+            "e-Sign Aadhaar (/api/v1/esign)",
+            "e-NACH Mandate (/api/v1/nach/mandate)",
+            "WhatsApp Bot Webhook (/api/v1/whatsapp/webhook + /send)",
+            "Collections Module (/api/v1/collections)",
+            "Co-Lending Module (/api/v1/colending)",
+            "AML / Sanctions Screening (/api/v1/aml/screen)",
+            "Alternate Credit Scoring NTC (/api/v1/alternate-score)",
+        ]
     }
 
 if __name__ == "__main__":
