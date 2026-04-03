@@ -1018,6 +1018,365 @@ nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-item
     </div>
 
   </div><!-- /result-panel -->
+
+<!-- ── v5.0 ADVANCED BANKING TOOLS ──────────────────────────────────────── -->
+<div id="advancedTools" style="margin-top:20px;">
+
+  <!-- Panel header -->
+  <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:14px;padding:18px 22px;margin-bottom:14px;box-shadow:0 4px 20px rgba(0,0,0,.18);">
+    <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:3px;">⚙️ Advanced Banking Tools</div>
+    <div style="font-size:11px;color:#94a3b8;">v5.0 — All 13 regulatory features. API-key required for each call.</div>
+  </div>
+
+  <!-- 1. Document Tamper Detection -->
+  <div class="section" style="border-left:3px solid #ef4444;">
+    <div class="section-head">
+      <div class="section-icon red">🔍</div>
+      <span class="section-title">Document Tamper Detection</span>
+      <span class="section-subtitle">AI forensic analysis</span>
+    </div>
+    <div class="section-body">
+      <div style="border:2px dashed rgba(239,68,68,.3);border-radius:10px;padding:16px;text-align:center;cursor:pointer;position:relative;background:#fff5f5;" onclick="document.getElementById('tamperFileIn').click()">
+        <input type="file" id="tamperFileIn" accept=".pdf" style="display:none" onchange="runTamperDetect(this.files[0])"/>
+        <div style="font-size:24px;margin-bottom:6px;">🔎</div>
+        <div style="font-size:12px;font-weight:600;color:#991b1b;">Drop any PDF document to check for tampering</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">CIBIL, bank statement, payslip, ITR — any financial PDF</div>
+      </div>
+      <div id="tamperSpinner" style="display:none;text-align:center;padding:12px;"><div class="spinner" style="border-top-color:#ef4444;"></div><p style="font-size:12px;color:#991b1b;">Forensic analysis running…</p></div>
+      <div id="tamperResult" style="display:none;margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- 2. Scorecard Engine -->
+  <div class="section" style="border-left:3px solid #7c3aed;">
+    <div class="section-head">
+      <div class="section-icon purple">📐</div>
+      <span class="section-title">Deterministic Scorecard</span>
+      <span class="section-subtitle">100-point rule-based score</span>
+    </div>
+    <div class="section-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Runs instantly from the submitted application data. No AI call — pure rule engine.</p>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="scorecardApiKey" placeholder="Your API key" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="text" id="scorecardAppId" placeholder="Application ID (LN-…)" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <button onclick="runScorecard()" style="padding:8px 16px;background:#7c3aed;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">Run</button>
+      </div>
+      <div id="scorecardResult" style="display:none;margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- 3. AML Screening -->
+  <div class="section" style="border-left:3px solid #c0392b;">
+    <div class="section-head">
+      <div class="section-icon red">🛡️</div>
+      <span class="section-title">AML / Sanctions Screening</span>
+      <span class="section-subtitle">6 watchlists checked</span>
+    </div>
+    <div class="section-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <input type="text" id="amlName" placeholder="Applicant full name" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="text" id="amlPan" placeholder="PAN number (optional)" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="text" id="amlApiKey" placeholder="API key" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="number" id="amlLoanAmt" placeholder="Loan amount (₹)" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+      </div>
+      <button onclick="runAmlScreen()" style="width:100%;padding:9px;background:#c0392b;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🛡️ Run AML Screen</button>
+      <div id="amlResult" style="display:none;margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- 4. Multi-Bureau Check -->
+  <div class="section" style="border-left:3px solid #c8972e;">
+    <div class="section-head">
+      <div class="section-icon gold">🏦</div>
+      <span class="section-title">Multi-Bureau Credit Pull</span>
+      <span class="section-subtitle">CIBIL + Experian + CRIF + Equifax</span>
+    </div>
+    <div class="section-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <input type="text" id="mbPan" placeholder="PAN number" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="text" id="mbName" placeholder="Applicant name" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="text" id="mbApiKey" placeholder="API key" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;grid-column:1/-1;"/>
+      </div>
+      <button onclick="runMultiBureau()" style="width:100%;padding:9px;background:#c8972e;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📊 Pull All Bureaus</button>
+      <div id="mbResult" style="display:none;margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- 5. Co-Lending Proposal -->
+  <div class="section" style="border-left:3px solid #1565c0;">
+    <div class="section-head">
+      <div class="section-icon blue">🤝</div>
+      <span class="section-title">Co-Lending Calculator</span>
+      <span class="section-subtitle">RBI CLM Model</span>
+    </div>
+    <div class="section-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <input type="text" id="clAppId" placeholder="Application ID" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <select id="clPartner" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;">
+          <option value="SBI">SBI (80% bank)</option>
+          <option value="Bank of Baroda">Bank of Baroda (75%)</option>
+          <option value="IDFC First">IDFC First (70%)</option>
+          <option value="Piramal">Piramal (80%)</option>
+        </select>
+        <input type="number" id="clAmount" placeholder="Loan amount (₹)" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="number" id="clRate" placeholder="NBFC rate (% p.a.)" step="0.1" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="text" id="clApiKey" placeholder="API key" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;grid-column:1/-1;"/>
+      </div>
+      <button onclick="runColending()" style="width:100%;padding:9px;background:#1565c0;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🤝 Propose Co-Lending</button>
+      <div id="clResult" style="display:none;margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- 6. Alternate Credit Score -->
+  <div class="section" style="border-left:3px solid #15803d;">
+    <div class="section-head">
+      <div class="section-icon green">🌱</div>
+      <span class="section-title">Alternate Credit Score (NTC)</span>
+      <span class="section-subtitle">For thin-file / first-time borrowers</span>
+    </div>
+    <div class="section-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <input type="number" id="ntcMobileMo" placeholder="Mobile tenure (months)" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="number" id="ntcUpiAvg" placeholder="UPI txns/month avg" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="number" id="ntcRecharge" placeholder="Avg mobile recharge (₹)" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <input type="number" id="ntcIncome" placeholder="Monthly income (₹)" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;"/>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;"><input type="checkbox" id="ntcUtility" checked/> Utility bills paid on time</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;"><input type="checkbox" id="ntcRental"/> Rental payment history</label>
+        <input type="text" id="ntcApiKey" placeholder="API key" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;grid-column:1/-1;"/>
+      </div>
+      <button onclick="runAltScore()" style="width:100%;padding:9px;background:#15803d;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🌱 Score NTC Borrower</button>
+      <div id="ntcResult" style="display:none;margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- API Reference -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-icon orange">📡</div>
+      <span class="section-title">v5.0 API Reference</span>
+    </div>
+    <div class="section-body">
+      <div style="font-size:11px;color:var(--muted);line-height:2;font-family:monospace;">
+        POST /api/v1/kyc/pan &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ PAN eKYC<br/>
+        POST /api/v1/kyc/aadhaar &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ Aadhaar eKYC<br/>
+        POST /api/v1/tamper-detect &nbsp;&nbsp;&nbsp;→ Document Forgery AI<br/>
+        POST /api/v1/scorecard &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ 100-pt Scorecard<br/>
+        POST /api/v1/aa/consent &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ AA Framework<br/>
+        GET &nbsp;/api/v1/aa/data/{id} &nbsp;&nbsp;&nbsp;&nbsp;→ AA Data Fetch<br/>
+        POST /api/v1/multi-bureau &nbsp;&nbsp;&nbsp;&nbsp;→ 4-Bureau Pull<br/>
+        POST /api/v1/gst-analysis &nbsp;&nbsp;&nbsp;&nbsp;→ GST Underwriting<br/>
+        POST /api/v1/vkyc/schedule &nbsp;&nbsp;&nbsp;→ Video KYC<br/>
+        POST /api/v1/esign &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ e-Sign (Aadhaar)<br/>
+        POST /api/v1/nach/mandate &nbsp;&nbsp;&nbsp;&nbsp;→ e-NACH Setup<br/>
+        POST /api/v1/whatsapp/webhook &nbsp;→ WA Bot Webhook<br/>
+        GET &nbsp;/api/v1/collections/{id} &nbsp;→ Collections<br/>
+        POST /api/v1/colending/propose &nbsp;→ Co-Lending<br/>
+        POST /api/v1/aml/screen &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ AML Screening<br/>
+        POST /api/v1/alternate-score &nbsp;&nbsp;→ NTC Scoring
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── v5.0 Advanced Tools JS ─────────────────────────────────────────────────
+
+async function runTamperDetect(file) {
+  if (!file) return;
+  document.getElementById('tamperSpinner').style.display = 'block';
+  document.getElementById('tamperResult').style.display  = 'none';
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const res  = await fetch('/api/v1/tamper-detect', { method:'POST', body: fd,
+      headers: {'Cookie': document.cookie} });
+    const data = await res.json();
+    document.getElementById('tamperSpinner').style.display = 'none';
+    const risk  = data.risk_level || 'LOW';
+    const color = risk === 'HIGH' ? '#c0392b' : risk === 'MEDIUM' ? '#c17f24' : '#1a7f5a';
+    const html  = `
+      <div style="background:${risk==='HIGH'?'#fff5f5':risk==='MEDIUM'?'#fffbeb':'#f0fdf4'};border:1.5px solid ${color};border-radius:10px;padding:14px;">
+        <div style="font-size:13px;font-weight:700;color:${color};margin-bottom:8px;">
+          ${risk==='HIGH'?'🚨':'risk'==='MEDIUM'?'⚠️':'✅'} ${data.verdict || 'Analysis complete'}
+        </div>
+        <div style="font-size:11px;color:#374151;">Tampered: <strong>${data.tampered?'YES':'NO'}</strong> | Confidence: <strong>${data.confidence}%</strong> | Risk: <strong>${risk}</strong></div>
+        ${(data.flags||[]).length>0 ? '<ul style="margin-top:8px;font-size:11px;color:#7f1d1d;list-style:none;">'+data.flags.map(f=>'<li>⚠️ '+f+'</li>').join('')+'</ul>' : ''}
+        ${data.recommend_manual_review ? '<div style="margin-top:8px;font-size:11px;font-weight:600;color:#991b1b;">⚡ Escalate to compliance for manual review.</div>' : ''}
+      </div>`;
+    document.getElementById('tamperResult').innerHTML = html;
+    document.getElementById('tamperResult').style.display = 'block';
+  } catch(e) {
+    document.getElementById('tamperSpinner').style.display = 'none';
+    document.getElementById('tamperResult').innerHTML = '<p style="color:red;font-size:12px;">Error: '+e.message+'</p>';
+    document.getElementById('tamperResult').style.display = 'block';
+  }
+}
+
+async function runAmlScreen() {
+  const name    = document.getElementById('amlName').value.trim();
+  const pan     = document.getElementById('amlPan').value.trim();
+  const apiKey  = document.getElementById('amlApiKey').value.trim();
+  const loanAmt = document.getElementById('amlLoanAmt').value;
+  if (!name || !apiKey) { alert('Name and API key required.'); return; }
+  document.getElementById('amlResult').style.display = 'none';
+  try {
+    const res  = await fetch('/api/v1/aml/screen', {
+      method:'POST', headers:{'Content-Type':'application/json','X-API-Key':apiKey},
+      body: JSON.stringify({ name, pan, loan_amount: parseFloat(loanAmt)||0 })
+    });
+    const data = await res.json();
+    const risk  = data.risk_level || 'LOW';
+    const color = risk==='HIGH'?'#c0392b':risk==='MEDIUM'?'#c17f24':'#1a7f5a';
+    document.getElementById('amlResult').innerHTML = `
+      <div style="background:${risk==='LOW'?'#f0fdf4':'#fff5f5'};border:1.5px solid ${color};border-radius:10px;padding:12px;">
+        <div style="font-size:13px;font-weight:700;color:${color};">${risk==='LOW'?'✅ CLEAR':'⚠️ '+risk+' RISK'}</div>
+        <div style="font-size:11px;margin-top:6px;">${data.recommendation}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px;">Lists checked: ${(data.lists_checked||[]).join(' · ')}</div>
+        ${(data.flags||[]).length>0 ? '<ul style="font-size:11px;margin-top:6px;">'+data.flags.map(f=>'<li>'+f+'</li>').join('')+'</ul>' : ''}
+      </div>`;
+    document.getElementById('amlResult').style.display = 'block';
+  } catch(e) { alert('AML screen error: '+e.message); }
+}
+
+async function runMultiBureau() {
+  const pan    = document.getElementById('mbPan').value.trim();
+  const name   = document.getElementById('mbName').value.trim();
+  const apiKey = document.getElementById('mbApiKey').value.trim();
+  if (!pan || !name || !apiKey) { alert('PAN, name and API key required.'); return; }
+  try {
+    const res  = await fetch('/api/v1/multi-bureau', {
+      method:'POST', headers:{'Content-Type':'application/json','X-API-Key':apiKey},
+      body: JSON.stringify({pan, name})
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    const scores = data.scores_by_bureau || {};
+    const bars   = Object.entries(scores).map(([bureau, score]) => {
+      const pct = ((score-300)/600*100).toFixed(0);
+      const c   = score>=750?'#1a7f5a':score>=700?'#c17f24':'#c0392b';
+      return `<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;"><span>${bureau}</span><strong style="color:${c}">${score}</strong></div><div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${c};border-radius:3px;"></div></div></div>`;
+    }).join('');
+    document.getElementById('mbResult').innerHTML = `
+      <div style="background:#f8f7f3;border-radius:10px;padding:14px;">
+        ${bars}
+        <div style="font-size:11px;margin-top:10px;padding:8px;background:white;border-radius:7px;color:var(--primary);">
+          Best: <strong>${data.best_score}</strong> | Worst: <strong>${data.worst_score}</strong> | Spread: ${data.spread} pts<br/>
+          <em>${data.recommendation}</em>
+        </div>
+      </div>`;
+    document.getElementById('mbResult').style.display = 'block';
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+async function runColending() {
+  const appId  = document.getElementById('clAppId').value.trim();
+  const partner = document.getElementById('clPartner').value;
+  const amount = parseFloat(document.getElementById('clAmount').value||0);
+  const rate   = parseFloat(document.getElementById('clRate').value||14);
+  const apiKey = document.getElementById('clApiKey').value.trim();
+  if (!amount || !apiKey) { alert('Loan amount and API key required.'); return; }
+  try {
+    const res  = await fetch('/api/v1/colending/propose', {
+      method:'POST', headers:{'Content-Type':'application/json','X-API-Key':apiKey},
+      body: JSON.stringify({application_id: appId, loan_amount: amount, interest_rate: rate, partner_bank: partner})
+    });
+    const d    = await res.json();
+    const fmt  = n => '₹'+Number(n).toLocaleString('en-IN');
+    document.getElementById('clResult').innerHTML = `
+      <div style="background:#eff6ff;border:1px solid rgba(21,101,192,.2);border-radius:10px;padding:14px;">
+        <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:8px;">🤝 ${d.partner_bank} Co-Lending Proposal</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;">
+          <div>NBFC share: <strong>${d.nbfc_share_pct}% = ${fmt(d.nbfc_share_amount)}</strong></div>
+          <div>Bank share: <strong>${d.bank_share_pct}% = ${fmt(d.bank_share_amount)}</strong></div>
+          <div>NBFC rate: <strong>${d.nbfc_rate}%</strong></div>
+          <div>Partner rate: <strong>${d.partner_rate}%</strong></div>
+          <div style="grid-column:1/-1;font-size:13px;color:#1565c0;">Blended rate: <strong>${d.blended_rate}%</strong> (saves borrower <strong>${d.rate_benefit_to_borrower}%</strong>)</div>
+        </div>
+      </div>`;
+    document.getElementById('clResult').style.display = 'block';
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+async function runAltScore() {
+  const apiKey = document.getElementById('ntcApiKey').value.trim();
+  if (!apiKey) { alert('API key required.'); return; }
+  const body = {
+    mobile_tenure_months: parseInt(document.getElementById('ntcMobileMo').value||0),
+    upi_txn_monthly_avg:  parseInt(document.getElementById('ntcUpiAvg').value||0),
+    avg_mobile_recharge:  parseInt(document.getElementById('ntcRecharge').value||0),
+    monthly_income:       parseInt(document.getElementById('ntcIncome').value||0),
+    utility_payments_on_time: document.getElementById('ntcUtility').checked,
+    rental_payment_history:   document.getElementById('ntcRental').checked,
+    employment_type: 'Salaried — Private Sector',
+  };
+  try {
+    const res  = await fetch('/api/v1/alternate-score', {
+      method:'POST', headers:{'Content-Type':'application/json','X-API-Key':apiKey},
+      body: JSON.stringify(body)
+    });
+    const d    = await res.json();
+    const gradeColor = {A:'#1a7f5a', B:'#c17f24', C:'#c0392b', D:'#991b1b'}[d.grade[0]] || '#6b7c77';
+    const pct  = d.alternate_score;
+    document.getElementById('ntcResult').innerHTML = `
+      <div style="background:#f0fdf4;border:1px solid rgba(21,128,61,.2);border-radius:10px;padding:14px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+          <div style="font-size:36px;font-weight:700;color:${gradeColor};font-family:'DM Serif Display',serif;">${d.alternate_score}</div>
+          <div>
+            <div style="font-size:18px;font-weight:700;color:${gradeColor};">Grade ${d.grade}</div>
+            <div style="font-size:11px;color:var(--muted);">NTC Alternate Score / 100</div>
+          </div>
+        </div>
+        <div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin-bottom:10px;"><div style="width:${pct}%;height:100%;background:${gradeColor};border-radius:3px;"></div></div>
+        <div style="font-size:12px;color:#14532d;margin-bottom:6px;">${d.recommendation}</div>
+        <div style="font-size:10px;color:var(--muted);">${Object.entries(d.breakdown||{}).map(([k,v])=>k+': '+v.points+'/'+v.max).join(' · ')}</div>
+      </div>`;
+    document.getElementById('ntcResult').style.display = 'block';
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+async function runScorecard() {
+  const apiKey = document.getElementById('scorecardApiKey').value.trim();
+  const appId  = document.getElementById('scorecardAppId').value.trim();
+  if (!apiKey) { alert('API key required.'); return; }
+  // Read from the main form
+  const form = document.getElementById('loanForm');
+  const fd   = new FormData(form);
+  const body = {
+    cibil_score:        parseInt(fd.get('cibil_score')||300),
+    foir:               0,  // computed server-side; use 0 here for quick scorecard
+    dpd_30_count:       parseInt(fd.get('dpd_30_count')||0),
+    dpd_90_count:       parseInt(fd.get('dpd_90_count')||0),
+    bounce_count_6m:    parseInt(fd.get('bounce_count_6m')||0),
+    credit_vintage_yrs: parseFloat(fd.get('credit_vintage_yrs')||0),
+    employment_type:    fd.get('employment_type')||'',
+    monthly_income:     parseFloat(fd.get('monthly_income')||0),
+    avg_monthly_balance:parseFloat(fd.get('avg_monthly_balance')||0),
+    enquiries_6m:       parseInt(fd.get('enquiries_6m')||0),
+    writeoff_settled:   fd.get('writeoff_settled')||'no',
+  };
+  try {
+    const res  = await fetch('/api/v1/scorecard', {
+      method:'POST', headers:{'Content-Type':'application/json','X-API-Key':apiKey},
+      body: JSON.stringify(body)
+    });
+    const d = await res.json();
+    const gradeColor = {A:'#1a7f5a', B:'#c17f24', C:'#ea580c', D:'#c0392b'}[d.grade?.[0]] || '#6b7c77';
+    const pct = d.total_score;
+    document.getElementById('scorecardResult').innerHTML = `
+      <div style="background:#faf5ff;border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:14px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+          <div style="font-size:36px;font-weight:700;color:${gradeColor};font-family:'DM Serif Display',serif;">${d.total_score}</div>
+          <div><div style="font-size:18px;font-weight:700;color:${gradeColor};">Grade ${d.grade}</div><div style="font-size:11px;color:var(--muted);">Score / ${d.max_score}</div></div>
+        </div>
+        <div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin-bottom:10px;"><div style="width:${pct}%;height:100%;background:${gradeColor};border-radius:3px;"></div></div>
+        <div style="font-size:12px;color:#4c1d95;margin-bottom:6px;">${d.verdict}</div>
+        <div style="font-size:10px;color:var(--muted);">${Object.entries(d.breakdown||{}).map(([k,v])=>k+': '+v.points+'/'+v.max).join(' · ')}</div>
+      </div>`;
+    document.getElementById('scorecardResult').style.display = 'block';
+  } catch(e) { alert('Error: '+e.message); }
+}
+</script>
+
 </div>
 </div><!-- /grid -->
 </div><!-- /page -->
