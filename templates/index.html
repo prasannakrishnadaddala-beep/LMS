@@ -8,198 +8,162 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --primary:#0e4f35;--primary-dark:#0a3320;--primary-light:#1a6b4a;
+  --primary:#0e4f35;--primary-dark:#0a3320;
   --gold:#c8972e;--gold-light:#e8b84b;
   --bg:#eeeae2;--card:#ffffff;--text:#1a1a1a;
   --muted:#6b7c77;--border:#d5d0c5;
   --success:#1a7f5a;--danger:#c0392b;--warning:#c17f24;
+  --info:#1565c0;
   --radius:12px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
 
-/* ── Nav ── */
-nav{
-  background:var(--primary);
-  padding:0 28px;height:58px;
-  display:flex;align-items:center;justify-content:space-between;
-  box-shadow:0 2px 12px rgba(0,0,0,0.2);
-  position:sticky;top:0;z-index:100;
-}
+/* NAV */
+nav{background:var(--primary);padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,.2);position:sticky;top:0;z-index:100;}
 .nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
-.nav-logo{
-  width:34px;height:34px;
-  background:rgba(200,151,46,0.2);
-  border:1px solid rgba(200,151,46,0.4);
-  border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;
-}
-.nav-title{color:white;font-size:15px;font-weight:600;letter-spacing:0.2px;}
+.nav-logo{width:34px;height:34px;background:rgba(200,151,46,.2);border:1px solid rgba(200,151,46,.4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.nav-title{color:white;font-size:15px;font-weight:600;}
 .nav-title span{color:#c8972e;font-family:'DM Serif Display',serif;}
 .nav-right{display:flex;align-items:center;gap:6px;}
-.nav-link{
-  padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;
-  color:rgba(255,255,255,0.75);text-decoration:none;
-  transition:background .15s,color .15s;cursor:pointer;border:none;background:none;
-  font-family:'DM Sans',sans-serif;
-}
-.nav-link:hover{background:rgba(255,255,255,0.1);color:white;}
-.nav-link.active{background:rgba(200,151,46,0.2);color:#e8b84b;}
-.nav-user{
-  font-size:12px;color:rgba(255,255,255,0.5);
-  padding:0 10px;border-right:1px solid rgba(255,255,255,0.15);
-  margin-right:4px;
-}
+.nav-link{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,.75);text-decoration:none;transition:background .15s,color .15s;cursor:pointer;border:none;background:none;font-family:'DM Sans',sans-serif;}
+.nav-link:hover{background:rgba(255,255,255,.1);color:white;}
+.nav-link.active{background:rgba(200,151,46,.2);color:#e8b84b;}
+.nav-user{font-size:12px;color:rgba(255,255,255,.5);padding:0 10px;border-right:1px solid rgba(255,255,255,.15);margin-right:4px;}
 
-/* ── Loan tabs ── */
-.tabs-wrap{background:white;border-bottom:1px solid var(--border);padding:0 28px;}
-.tabs{display:flex;gap:2px;max-width:1000px;margin:0 auto;overflow-x:auto;scrollbar-width:none;}
-.tabs::-webkit-scrollbar{display:none;}
-.tab{
-  padding:12px 15px;font-size:12px;font-weight:500;
-  color:var(--muted);cursor:pointer;white-space:nowrap;
-  border-bottom:2.5px solid transparent;transition:all .15s;
-  background:none;border-top:none;border-left:none;border-right:none;
-  font-family:'DM Sans',sans-serif;
-}
+/* LOAN TYPE TABS */
+.loan-tabs{background:white;border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;}
+.loan-tabs::-webkit-scrollbar{display:none;}
+.tab{padding:14px 16px;border:none;background:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;color:var(--muted);white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s;display:flex;align-items:center;gap:6px;}
 .tab:hover{color:var(--primary);}
 .tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600;}
+.tab-icon{font-size:15px;}
 
-/* ── Layout ── */
-.container{max-width:1000px;margin:24px auto;padding:0 24px;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-@media(max-width:720px){.grid{grid-template-columns:1fr;}}
+/* LAYOUT */
+.page{max-width:1200px;margin:0 auto;padding:24px;}
+.grid{display:grid;grid-template-columns:1fr 420px;gap:20px;align-items:start;}
+@media(max-width:900px){.grid{grid-template-columns:1fr;}}
 
-/* ── Cards ── */
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;}
-.card-title{
-  font-size:13px;font-weight:600;color:var(--muted);
-  text-transform:uppercase;letter-spacing:0.6px;
-  margin-bottom:18px;display:flex;align-items:center;gap:8px;
+/* SECTION CARD */
+.section{background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px;}
+.section-head{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid #f0ede6;background:#fafaf8;}
+.section-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.section-icon.green{background:rgba(26,127,90,.12);color:var(--success);}
+.section-icon.blue{background:rgba(21,101,192,.12);color:var(--info);}
+.section-icon.orange{background:rgba(193,127,36,.12);color:var(--warning);}
+.section-icon.red{background:rgba(192,57,43,.12);color:var(--danger);}
+.section-icon.gold{background:rgba(200,151,46,.12);color:var(--gold);}
+.section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--primary);}
+.section-subtitle{font-size:11px;color:var(--muted);margin-left:auto;}
+.section-body{padding:18px 20px;}
+
+/* FORM FIELDS */
+.fields{display:grid;gap:14px;}
+.fields.cols2{grid-template-columns:1fr 1fr;}
+.fields.cols3{grid-template-columns:1fr 1fr 1fr;}
+@media(max-width:600px){.fields.cols2,.fields.cols3{grid-template-columns:1fr;}}
+.field label{display:block;font-size:10px;font-weight:700;color:#374151;margin-bottom:5px;letter-spacing:0.5px;text-transform:uppercase;}
+.field label .req{color:var(--danger);}
+.field input,.field select,.field textarea{
+  width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:#fafaf8;
+  outline:none;transition:border-color .2s,box-shadow .2s;
 }
-.card-title::before{content:'';width:3px;height:14px;background:var(--gold);border-radius:2px;display:inline-block;}
+.field input:focus,.field select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(14,79,53,.08);background:white;}
+.field .hint{font-size:11px;color:var(--muted);margin-top:4px;}
+.field .hint.warn{color:var(--warning);}
 
-/* ── Form ── */
-.form-group{margin-bottom:14px;}
-label{display:block;font-size:11px;font-weight:600;color:#4b5563;margin-bottom:5px;letter-spacing:0.4px;text-transform:uppercase;}
-input,select{
-  width:100%;padding:10px 13px;
-  border:1.5px solid var(--border);border-radius:8px;
-  font-size:13.5px;font-family:'DM Sans',sans-serif;
-  color:var(--text);background:#fafaf8;outline:none;
-  transition:border-color .2s,box-shadow .2s;
+/* TOGGLE PAIR */
+.toggle-pair{display:flex;gap:0;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;}
+.toggle-pair label{flex:1;text-align:center;padding:8px 6px;font-size:12px;font-weight:500;cursor:pointer;transition:background .15s,color .15s;color:var(--muted);user-select:none;}
+.toggle-pair input[type=radio]{display:none;}
+.toggle-pair input[type=radio]:checked + label{background:var(--primary);color:white;}
+
+/* PRODUCT HINT BOX */
+.product-hint{background:rgba(200,151,46,.08);border:1px solid rgba(200,151,46,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#7a5c1a;line-height:1.6;display:none;}
+.product-hint.visible{display:block;}
+.product-hint strong{color:var(--primary);}
+
+/* SUBMIT BTN */
+.submit-btn{
+  width:100%;padding:15px;
+  background:var(--primary);color:white;border:none;
+  border-radius:10px;font-size:15px;font-weight:700;
+  font-family:'DM Sans',sans-serif;cursor:pointer;
+  letter-spacing:0.3px;transition:background .2s,transform .1s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:4px;
 }
-input:focus,select:focus{
-  border-color:var(--primary);
-  box-shadow:0 0 0 3px rgba(14,79,53,.08);
-  background:white;
-}
-.hint-box{
-  background:#f0faf5;border:1px solid #a7f3d0;
-  border-radius:8px;padding:10px 13px;margin-bottom:14px;
-}
-.hint-box p{font-size:12px;color:#065f46;line-height:1.65;}
-.hidden{display:none!important;}
+.submit-btn:hover{background:var(--primary-dark);}
+.submit-btn:active{transform:scale(0.99);}
+.submit-btn:disabled{background:#9ca3af;cursor:not-allowed;}
 
-/* ── Submit button ── */
-.btn-submit{
-  width:100%;padding:13px;margin-top:6px;
-  background:linear-gradient(135deg,var(--primary),var(--primary-light));
-  color:white;border:none;border-radius:10px;
-  font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;
-  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
-  transition:opacity .2s,transform .1s;letter-spacing:0.2px;
-}
-.btn-submit:hover{opacity:0.9;}
-.btn-submit:active{transform:scale(0.99);}
-.btn-submit:disabled{opacity:0.55;cursor:not-allowed;}
-.loader{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .65s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg);}}
+/* RESULT PANEL */
+.result-panel{display:none;}
+.result-panel.visible{display:block;}
 
-/* ── Loan type badge ── */
-.loan-badge{
-  display:inline-block;padding:2px 9px;
-  border-radius:5px;font-size:11px;font-weight:600;
-  background:#ecfdf5;color:var(--success);border:1px solid #a7f3d0;
-  margin-left:8px;text-transform:none;letter-spacing:0;
-}
+/* DECISION HEADER */
+.decision-header{border-radius:var(--radius);padding:22px 24px;margin-bottom:14px;position:relative;overflow:hidden;}
+.decision-header.APPROVED{background:linear-gradient(135deg,#0e4f35,#1a7f5a);}
+.decision-header.REJECTED{background:linear-gradient(135deg,#7f1d1d,#c0392b);}
+.decision-header.CONDITIONAL{background:linear-gradient(135deg,#78350f,#d97706);}
+.dh-badge{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;color:white;letter-spacing:0.5px;margin-bottom:10px;}
+.dh-appid{font-family:'DM Serif Display',serif;font-size:22px;color:white;margin-bottom:4px;}
+.dh-name{font-size:13px;color:rgba(255,255,255,.75);}
+.dh-metrics{display:flex;gap:16px;margin-top:14px;flex-wrap:wrap;}
+.dh-metric{text-align:center;}
+.dh-metric .val{font-size:18px;font-weight:700;color:white;font-family:'DM Serif Display',serif;}
+.dh-metric .lbl{font-size:10px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:0.5px;}
 
-/* ═══════════════════ RESULTS ═══════════════════ */
-#result-section{display:none;margin-top:22px;}
+/* RESULT SECTIONS */
+.res-card{background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;}
+.res-card-head{padding:11px 16px;background:#fafaf8;border-bottom:1px solid #f0ede6;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--primary);display:flex;align-items:center;gap:7px;}
+.res-card-body{padding:14px 16px;}
 
-/* App ID bar */
-.app-id-bar{
-  background:var(--primary);color:white;
-  border-radius:var(--radius) var(--radius) 0 0;
-  padding:12px 22px;display:flex;align-items:center;justify-content:space-between;
-}
-.app-id-bar .label{font-size:11px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:0.5px;}
-.app-id-bar .id{font-size:14px;font-weight:700;font-family:'DM Serif Display',serif;color:#e8b84b;letter-spacing:1px;}
-.app-id-bar .ts{font-size:11px;color:rgba(255,255,255,.5);}
+/* BUREAU / CASHFLOW ASSESSMENT */
+.assessment-text{font-size:13px;color:var(--text);line-height:1.7;}
 
-/* Decision banner */
-.banner{
-  border-radius:0 0 var(--radius) var(--radius);
-  padding:18px 22px;margin-bottom:18px;
-  display:flex;align-items:center;gap:16px;
-  border-left:4px solid transparent;
-}
-.banner.approved{background:#ecfdf5;border-color:var(--success);}
-.banner.rejected{background:#fef2f2;border-color:var(--danger);}
-.banner.conditional{background:#fffbeb;border-color:var(--warning);}
-.dec-icon{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
-.approved .dec-icon{background:#d1fae5;}
-.rejected .dec-icon{background:#fee2e2;}
-.conditional .dec-icon{background:#fef3c7;}
-.dec-title{font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:3px;}
-.approved .dec-title{color:var(--success);}
-.rejected .dec-title{color:var(--danger);}
-.conditional .dec-title{color:var(--warning);}
-.dec-reason{font-size:13px;color:var(--muted);line-height:1.6;}
+/* METRICS ROW */
+.metrics-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+.metric-box{background:#f8f7f3;border-radius:8px;padding:12px;text-align:center;}
+.metric-box .mv{font-size:17px;font-weight:700;color:var(--primary);font-family:'DM Serif Display',serif;}
+.metric-box .ml{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-top:2px;}
+.metric-box.danger .mv{color:var(--danger);}
+.metric-box.warn .mv{color:var(--warning);}
+.metric-box.success .mv{color:var(--success);}
 
-/* Stats row */
-.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-bottom:18px;}
-@media(max-width:580px){.stats-row{grid-template-columns:1fr 1fr;}}
-.stat{
-  background:white;border:1px solid var(--border);
-  border-radius:10px;padding:14px;text-align:center;
-}
-.stat-val{font-size:17px;font-weight:700;color:var(--primary);font-family:'DM Serif Display',serif;}
-.stat-lbl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:0.5px;}
+/* LISTS */
+.item-list{list-style:none;display:flex;flex-direction:column;gap:7px;}
+.item-list li{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.5;}
+.item-list li .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:6px;}
+.item-list.strengths li .dot{background:var(--success);}
+.item-list.concerns li .dot{background:var(--danger);}
+.item-list.docs li .dot{background:var(--gold);}
+.item-list.flags li .dot{background:var(--danger);}
 
-/* Two-col lists */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
-@media(max-width:580px){.two-col{grid-template-columns:1fr;}}
-.list-card{background:white;border:1px solid var(--border);border-radius:10px;padding:15px;}
-.list-card h4{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);margin-bottom:10px;}
-.list-item{display:flex;align-items:flex-start;gap:7px;font-size:13px;margin-bottom:7px;line-height:1.5;}
-.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px;}
-.dot.g{background:var(--success);}
-.dot.r{background:var(--danger);}
+/* COUNTER OFFER */
+.counter-offer{background:rgba(21,101,192,.06);border:1px solid rgba(21,101,192,.2);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--info);line-height:1.6;}
+.counter-offer strong{display:block;margin-bottom:4px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;}
 
-/* Docs */
-.docs-section{background:#f8f7f3;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;}
-.docs-section h4{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);margin-bottom:10px;}
-.doc-chip{display:inline-block;background:white;border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;margin:3px;}
+/* POLICY VIOLATION */
+.policy-box{background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;}
+.policy-box .pv-title{font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
+.policy-box li{font-size:12px;color:#7f1d1d;padding:3px 0 3px 14px;position:relative;}
+.policy-box li::before{content:'✕';position:absolute;left:0;color:var(--danger);}
 
-/* Flags */
-.fraud-flag{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 12px;font-size:12px;color:#9a3412;margin-bottom:6px;}
-.reg-flag{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;font-size:12px;color:#991b1b;margin-bottom:6px;}
+/* LOADER */
+.loader{display:none;text-align:center;padding:40px 20px;}
+.loader.visible{display:block;}
+.spinner{width:36px;height:36px;border:3px solid #e5e7eb;border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader p{font-size:13px;color:var(--muted);}
 
-/* Recommendation */
-.rec-box{
-  background:linear-gradient(135deg,#f0faf5,#d1fae5);
-  border:1px solid #6ee7b7;border-radius:10px;padding:14px 18px;
-}
-.rec-box p{font-size:13px;color:#064e3b;line-height:1.65;}
-.rec-box strong{font-weight:600;}
-
-/* Error */
-.error-box{background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:16px 20px;color:#c0392b;font-size:14px;}
+/* RATE TAG */
+.rate-tag{display:inline-flex;align-items:center;gap:5px;background:rgba(200,151,46,.1);border:1px solid rgba(200,151,46,.3);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;color:#7a5c1a;}
 </style>
 </head>
 <body>
 
-<!-- ── Nav ── -->
 <nav>
   <a class="nav-brand" href="/">
     <div class="nav-logo">🏦</div>
@@ -215,284 +179,552 @@ input:focus,select:focus{
   </div>
 </nav>
 
-<!-- ── Loan type tabs ── -->
-<div class="tabs-wrap">
-  <div class="tabs" id="loanTabs">
-    <button class="tab active" data-type="Personal Loan">💳 Personal</button>
-    <button class="tab" data-type="Home Loan">🏠 Home</button>
-    <button class="tab" data-type="Car Loan">🚗 Car</button>
-    <button class="tab" data-type="Gold Loan">🪙 Gold</button>
-    <button class="tab" data-type="Business Loan">💼 Business</button>
-    <button class="tab" data-type="Loan Against Property">🏢 LAP</button>
-    <button class="tab" data-type="Two-Wheeler Loan">🛵 2-Wheeler</button>
-    <button class="tab" data-type="Education Loan">🎓 Education</button>
-    <button class="tab" data-type="Microfinance / JLG Loan">🤝 MFI/JLG</button>
+<!-- Loan type tabs -->
+<div class="loan-tabs" id="loanTabs">
+  <button class="tab active" data-lt="Personal Loan" onclick="setLoanType(this)"><span class="tab-icon">💳</span>Personal</button>
+  <button class="tab" data-lt="Home Loan" onclick="setLoanType(this)"><span class="tab-icon">🏠</span>Home</button>
+  <button class="tab" data-lt="Car Loan" onclick="setLoanType(this)"><span class="tab-icon">🚗</span>Car</button>
+  <button class="tab" data-lt="Gold Loan" onclick="setLoanType(this)"><span class="tab-icon">🥇</span>Gold</button>
+  <button class="tab" data-lt="Business Loan" onclick="setLoanType(this)"><span class="tab-icon">🏢</span>Business</button>
+  <button class="tab" data-lt="Loan Against Property" onclick="setLoanType(this)"><span class="tab-icon">🏗️</span>LAP</button>
+  <button class="tab" data-lt="Two-Wheeler Loan" onclick="setLoanType(this)"><span class="tab-icon">🛵</span>2-Wheeler</button>
+  <button class="tab" data-lt="Education Loan" onclick="setLoanType(this)"><span class="tab-icon">🎓</span>Education</button>
+  <button class="tab" data-lt="Microfinance / JLG Loan" onclick="setLoanType(this)"><span class="tab-icon">🤝</span>MFI/JLG</button>
+</div>
+
+<div class="page">
+<div class="grid">
+
+<!-- LEFT: FORM -->
+<div>
+<form id="loanForm">
+<input type="hidden" name="loan_type" id="loanTypeInput" value="Personal Loan"/>
+
+<!-- Product hint -->
+<div class="product-hint" id="productHint"></div>
+<br id="hintSpacer" style="display:none"/>
+
+<!-- S1: Applicant -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon green">👤</div>
+    <span class="section-title">Applicant Profile</span>
+  </div>
+  <div class="section-body">
+    <div class="fields cols2">
+      <div class="field">
+        <label>Full Name <span class="req">*</span></label>
+        <input type="text" name="full_name" placeholder="e.g. Rajesh Kumar" required/>
+      </div>
+      <div class="field">
+        <label>Age <span class="req">*</span></label>
+        <input type="number" name="age" placeholder="e.g. 34" min="21" max="65" required/>
+        <div class="hint">21–65 years</div>
+      </div>
+      <div class="field">
+        <label>Employment Type <span class="req">*</span></label>
+        <select name="employment_type" required>
+          <option value="">Select type</option>
+          <option>Salaried — Private Sector</option>
+          <option>Salaried — Government / PSU</option>
+          <option>Self-Employed Professional</option>
+          <option>Business Owner / Proprietor</option>
+          <option>Partnership / Director</option>
+          <option>Freelancer / Consultant</option>
+          <option>Farmer / Agricultural</option>
+          <option>Pensioner</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Employer / Business Name</label>
+        <input type="text" name="employer_name" placeholder="e.g. Infosys Ltd / ABC Traders"/>
+      </div>
+      <div class="field">
+        <label>Employer Vintage (years)</label>
+        <input type="number" name="employer_vintage_yrs" placeholder="e.g. 3" min="0" step="0.5" value="0"/>
+        <div class="hint">Years at current employer/business</div>
+      </div>
+      <div class="field" id="bizVintageField" style="display:none">
+        <label>Business Vintage (years)</label>
+        <input type="number" name="business_vintage_yrs" placeholder="e.g. 4" min="0" step="0.5" value="0"/>
+        <div class="hint warn">Min 2 years required for Business Loan</div>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- ── Form ── -->
-<div class="container">
-  <form id="loanForm">
-    <input type="hidden" name="loan_type" id="loanTypeInput" value="Personal Loan"/>
-    <div class="grid">
-
-      <!-- Applicant -->
-      <div class="card">
-        <div class="card-title">Applicant Details</div>
-        <div class="form-group"><label>Full Name</label><input type="text" name="full_name" placeholder="e.g. Rajesh Kumar" required/></div>
-        <div class="form-group"><label>Age</label><input type="number" name="age" placeholder="e.g. 32" min="18" max="70" required/></div>
-        <div class="form-group">
-          <label>Employment Type</label>
-          <select name="employment_type" required>
-            <option value="">Select employment type</option>
-            <option>Salaried — Private Sector</option>
-            <option>Salaried — Government</option>
-            <option>Self-Employed Professional</option>
-            <option>Business Owner</option>
-            <option>Freelancer / Consultant</option>
-            <option>Farmer / Agricultural</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Monthly Income (₹)</label><input type="number" name="monthly_income" placeholder="e.g. 75000" min="1" required/></div>
-        <div class="form-group"><label>Monthly Expenses (₹)</label><input type="number" name="monthly_expenses" placeholder="e.g. 35000" min="0" required/></div>
-        <div class="form-group">
-          <label>CIBIL Score <span id="cibilNote" style="color:var(--success);font-size:10px;text-transform:none;letter-spacing:0;font-weight:500;"></span></label>
-          <input type="number" name="cibil_score" id="cibilInput" placeholder="e.g. 740" min="0" max="900" required/>
-        </div>
-        <div class="form-group"><label>Active Loans Count</label><input type="number" name="existing_loans" placeholder="e.g. 1" min="0" max="10" required/></div>
-        <div class="form-group hidden" id="vintageGroup">
-          <label>Business Vintage (years)</label>
-          <input type="number" name="business_vintage" placeholder="e.g. 3" min="0" max="50" value="0"/>
-        </div>
+<!-- S2: Income & Cashflow -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon blue">💰</div>
+    <span class="section-title">Income & Cash Flow</span>
+    <span class="section-subtitle">Verified financial profile</span>
+  </div>
+  <div class="section-body">
+    <div class="fields cols2">
+      <div class="field">
+        <label>Monthly Income (₹) <span class="req">*</span></label>
+        <input type="number" name="monthly_income" placeholder="e.g. 75000" min="0" required/>
+        <div class="hint">Gross monthly income</div>
       </div>
-
-      <!-- Loan details -->
-      <div class="card">
-        <div class="card-title">
-          Loan Details
-          <span class="loan-badge" id="loanTypeBadge">Personal Loan</span>
-        </div>
-        <div class="hint-box"><p id="hintText">💡 Personal Loan: Income stability and CIBIL 700+ are primary factors. No collateral needed.</p></div>
-        <div class="form-group"><label>Loan Amount (₹)</label><input type="number" name="loan_amount" placeholder="e.g. 500000" min="1" required/></div>
-        <div class="form-group">
-          <label>Loan Tenure (months)</label>
-          <select name="loan_tenure" required>
-            <option value="">Select tenure</option>
-            <option value="6">6 months</option>
-            <option value="12">12 months (1 yr)</option>
-            <option value="24">24 months (2 yr)</option>
-            <option value="36">36 months (3 yr)</option>
-            <option value="48">48 months (4 yr)</option>
-            <option value="60">60 months (5 yr)</option>
-            <option value="84">84 months (7 yr)</option>
-            <option value="120">120 months (10 yr)</option>
-            <option value="180">180 months (15 yr)</option>
-            <option value="240">240 months (20 yr)</option>
-            <option value="300">300 months (25 yr)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Loan Purpose</label>
-          <select name="loan_purpose" required>
-            <option value="">Select purpose</option>
-            <option>Home Purchase</option>
-            <option>Home Renovation</option>
-            <option>Vehicle Purchase</option>
-            <option>Education / Tuition</option>
-            <option>Medical Emergency</option>
-            <option>Business Expansion</option>
-            <option>Debt Consolidation</option>
-            <option>Wedding / Event</option>
-            <option>Gold Pledge</option>
-            <option>Working Capital</option>
-            <option>Equipment Purchase</option>
-            <option>Agricultural</option>
-          </select>
-        </div>
-        <div class="form-group hidden" id="collateralGroup">
-          <label id="collateralLabel">Collateral / Property Value (₹)</label>
-          <input type="number" name="collateral_value" placeholder="e.g. 5000000" value="0"/>
-        </div>
-        <button class="btn-submit" type="submit" id="submitBtn">
-          <span id="btnText">⚡ Analyze with AI</span>
-          <div class="loader" id="loader" style="display:none"></div>
-        </button>
+      <div class="field">
+        <label>Monthly Expenses (₹) <span class="req">*</span></label>
+        <input type="number" name="monthly_expenses" placeholder="e.g. 25000" min="0" required/>
       </div>
-    </div>
-  </form>
-
-  <!-- ── Results ── -->
-  <div id="result-section">
-    <div id="error-box" class="error-box" style="display:none"></div>
-
-    <div id="success-result" style="display:none">
-      <!-- Application ID bar -->
-      <div class="app-id-bar">
-        <div>
-          <div class="label">Application Reference</div>
-          <div class="id" id="res-app-id">—</div>
+      <div class="field">
+        <label>Existing EMI Obligations (₹/month)</label>
+        <input type="number" name="existing_emi_total" placeholder="e.g. 12000" min="0" value="0"/>
+        <div class="hint">All active loan EMIs combined</div>
+      </div>
+      <div class="field" id="itrField">
+        <label>ITR Declared Income (₹/year)</label>
+        <input type="number" name="itr_income" placeholder="e.g. 900000" min="0" value="0"/>
+        <div class="hint">Latest ITR — used to verify income consistency</div>
+      </div>
+      <div class="field" id="gstField" style="display:none">
+        <label>GST Turnover (₹/year)</label>
+        <input type="number" name="gst_turnover" placeholder="e.g. 4800000" min="0" value="0"/>
+      </div>
+      <div class="field">
+        <label>Avg Monthly Bank Balance (₹)</label>
+        <input type="number" name="avg_monthly_balance" placeholder="e.g. 45000" min="0" value="0"/>
+        <div class="hint">12-month average EOD balance</div>
+      </div>
+      <div class="field">
+        <label>Cheque / ECS Bounces (last 6m)</label>
+        <input type="number" name="bounce_count_6m" placeholder="e.g. 0" min="0" value="0"/>
+        <div class="hint warn">0 is best. 3+ = cash flow stress flag</div>
+      </div>
+      <div class="field">
+        <label>Salary Credit Regularity</label>
+        <div class="toggle-pair">
+          <input type="radio" name="salary_credits_regular" id="scr_yes" value="yes" checked/>
+          <label for="scr_yes">✅ Regular</label>
+          <input type="radio" name="salary_credits_regular" id="scr_no" value="no"/>
+          <label for="scr_no">⚠️ Irregular</label>
         </div>
-        <div class="ts" id="res-ts"></div>
-      </div>
-
-      <!-- Decision banner -->
-      <div id="decision-banner" class="banner">
-        <div class="dec-icon" id="dec-icon"></div>
-        <div>
-          <div class="dec-title" id="dec-title"></div>
-          <div class="dec-reason" id="dec-reason"></div>
-        </div>
-      </div>
-
-      <!-- Stats -->
-      <div class="stats-row">
-        <div class="stat"><div class="stat-val" id="s-type">—</div><div class="stat-lbl">Loan Type</div></div>
-        <div class="stat"><div class="stat-val" id="s-amount">—</div><div class="stat-lbl">Approved Amt</div></div>
-        <div class="stat"><div class="stat-val" id="s-rate">—</div><div class="stat-lbl">Interest Rate</div></div>
-        <div class="stat"><div class="stat-val" id="s-emi">—</div><div class="stat-lbl">EMI / Month</div></div>
-        <div class="stat"><div class="stat-val" id="s-foir">—</div><div class="stat-lbl">FOIR Ratio</div></div>
-      </div>
-
-      <!-- Strengths + Concerns -->
-      <div class="two-col">
-        <div class="list-card"><h4>✅ Strengths</h4><div id="strengths-list"></div></div>
-        <div class="list-card"><h4>⚠️ Concerns</h4><div id="concerns-list"></div></div>
-      </div>
-
-      <!-- Docs -->
-      <div class="docs-section">
-        <h4>📄 Documents Required</h4>
-        <div id="docs-list"></div>
-      </div>
-
-      <!-- Flags -->
-      <div id="flags-section" style="margin-bottom:14px"></div>
-
-      <!-- Recommendation -->
-      <div class="rec-box">
-        <p><strong>💡 AI Recommendation: </strong><span id="rec-text"></span></p>
       </div>
     </div>
   </div>
-</div><!-- /container -->
+</div>
+
+<!-- S3: Bureau Profile -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon orange">📊</div>
+    <span class="section-title">Bureau Profile</span>
+    <span class="section-subtitle">CIBIL / Experian / CRIF signals</span>
+  </div>
+  <div class="section-body">
+    <div class="fields cols3">
+      <div class="field">
+        <label>CIBIL Score <span class="req">*</span></label>
+        <input type="number" name="cibil_score" placeholder="e.g. 740" min="300" max="900" required/>
+      </div>
+      <div class="field">
+        <label>Credit Vintage (years)</label>
+        <input type="number" name="credit_vintage_yrs" placeholder="e.g. 6" min="0" step="0.5" value="0"/>
+        <div class="hint">Age of oldest credit account</div>
+      </div>
+      <div class="field">
+        <label>Credit Enquiries (last 6m)</label>
+        <input type="number" name="enquiries_6m" placeholder="e.g. 1" min="0" value="0"/>
+        <div class="hint warn">6+ = credit hungry flag</div>
+      </div>
+      <div class="field">
+        <label>DPD 30+ (last 24 months)</label>
+        <input type="number" name="dpd_30_count" placeholder="0" min="0" value="0"/>
+        <div class="hint">Instances of 30+ days past due</div>
+      </div>
+      <div class="field">
+        <label>DPD 60+ (last 24 months)</label>
+        <input type="number" name="dpd_60_count" placeholder="0" min="0" value="0"/>
+      </div>
+      <div class="field">
+        <label>DPD 90+ (last 24 months)</label>
+        <input type="number" name="dpd_90_count" placeholder="0" min="0" value="0"/>
+        <div class="hint warn">Any 90+ DPD = auto reject</div>
+      </div>
+    </div>
+    <div class="fields cols2" style="margin-top:14px">
+      <div class="field">
+        <label>Write-off / Settlement on Bureau</label>
+        <div class="toggle-pair">
+          <input type="radio" name="writeoff_settled" id="wo_no" value="no" checked/>
+          <label for="wo_no">✅ None</label>
+          <input type="radio" name="writeoff_settled" id="wo_yes" value="yes"/>
+          <label for="wo_yes">🚫 Yes</label>
+        </div>
+        <div class="hint warn">Write-off = hard reject</div>
+      </div>
+      <div class="field">
+        <label>Secured / Unsecured Loan Mix</label>
+        <select name="secured_unsecured_ratio">
+          <option value="">Not provided</option>
+          <option value="Mostly secured (home/car loans)">Mostly secured (home/car)</option>
+          <option value="Mix of secured and unsecured">Mix of both</option>
+          <option value="Mostly unsecured (personal/credit card)">Mostly unsecured</option>
+          <option value="Only unsecured loans">Only unsecured</option>
+          <option value="First-time borrower">First-time borrower</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- S4: Loan Details -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon gold">📋</div>
+    <span class="section-title">Loan Request</span>
+  </div>
+  <div class="section-body">
+    <div class="fields cols2">
+      <div class="field">
+        <label>Loan Amount (₹) <span class="req">*</span></label>
+        <input type="number" name="loan_amount" placeholder="e.g. 500000" min="0" required/>
+      </div>
+      <div class="field">
+        <label>Loan Tenure <span class="req">*</span></label>
+        <select name="loan_tenure" required>
+          <option value="">Select tenure</option>
+          <option value="6">6 months</option>
+          <option value="12">12 months (1 yr)</option>
+          <option value="24">24 months (2 yr)</option>
+          <option value="36">36 months (3 yr)</option>
+          <option value="48">48 months (4 yr)</option>
+          <option value="60">60 months (5 yr)</option>
+          <option value="84">84 months (7 yr)</option>
+          <option value="120">120 months (10 yr)</option>
+          <option value="180">180 months (15 yr)</option>
+          <option value="240">240 months (20 yr)</option>
+          <option value="300">300 months (25 yr)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Loan Purpose <span class="req">*</span></label>
+        <select name="loan_purpose" required>
+          <option value="">Select purpose</option>
+          <option>Home Purchase</option>
+          <option>Home Renovation / Construction</option>
+          <option>Vehicle Purchase (New)</option>
+          <option>Vehicle Purchase (Used)</option>
+          <option>Business Working Capital</option>
+          <option>Business Expansion</option>
+          <option>Equipment / Machinery Purchase</option>
+          <option>Education / Skill Upgrade</option>
+          <option>Medical Emergency</option>
+          <option>Debt Consolidation</option>
+          <option>Wedding / Personal Event</option>
+          <option>Travel</option>
+          <option>Consumer Durables</option>
+          <option>Gold Pledge (liquidity)</option>
+          <option>Agricultural / Farm Input</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="field" id="collateralField" style="display:none">
+        <label>Collateral / Property Value (₹)</label>
+        <input type="number" name="collateral_value" placeholder="e.g. 5000000" min="0" value="0"/>
+        <div class="hint" id="collateralHint"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Submit -->
+<button type="submit" class="submit-btn" id="submitBtn">
+  ⚡ Analyze with AI
+</button>
+</form>
+</div>
+
+<!-- RIGHT: RESULT -->
+<div>
+  <!-- Loader -->
+  <div class="loader" id="loader">
+    <div class="spinner"></div>
+    <p>Running credit appraisal…</p>
+    <p style="font-size:11px;margin-top:6px;color:#9ca3af;">Policy gate → Bureau analysis → AI underwriting</p>
+  </div>
+
+  <!-- Result panel -->
+  <div class="result-panel" id="resultPanel">
+
+    <!-- Decision header -->
+    <div class="decision-header" id="decisionHeader">
+      <div class="dh-badge" id="dhBadge"></div>
+      <div class="dh-appid" id="dhAppId"></div>
+      <div class="dh-name" id="dhName"></div>
+      <div class="dh-metrics" id="dhMetrics"></div>
+    </div>
+
+    <!-- Policy violations (shown only if triggered) -->
+    <div class="res-card" id="policyCard" style="display:none">
+      <div class="res-card-head">🚫 Policy Violations — Auto Rejected</div>
+      <div class="res-card-body">
+        <div class="policy-box">
+          <div class="pv-title">Hard Rule Triggers</div>
+          <ul id="policyList"></ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Key metrics -->
+    <div class="res-card">
+      <div class="res-card-head">📐 Credit Metrics</div>
+      <div class="res-card-body">
+        <div class="metrics-row" id="metricsRow"></div>
+      </div>
+    </div>
+
+    <!-- Bureau assessment -->
+    <div class="res-card" id="bureauCard">
+      <div class="res-card-head">📊 Bureau Assessment</div>
+      <div class="res-card-body">
+        <p class="assessment-text" id="bureauText"></p>
+      </div>
+    </div>
+
+    <!-- Cashflow assessment -->
+    <div class="res-card" id="cashflowCard">
+      <div class="res-card-head">💰 Cash Flow Assessment</div>
+      <div class="res-card-body">
+        <p class="assessment-text" id="cashflowText"></p>
+      </div>
+    </div>
+
+    <!-- Reason -->
+    <div class="res-card">
+      <div class="res-card-head">📝 Credit Decision Rationale</div>
+      <div class="res-card-body">
+        <p class="assessment-text" id="reasonText"></p>
+        <p style="margin-top:10px;font-size:12px;padding:10px;background:#f8f7f3;border-radius:7px;color:var(--primary);font-weight:500;" id="recommendText"></p>
+      </div>
+    </div>
+
+    <!-- Counter offer (if rejected) -->
+    <div class="res-card" id="counterCard" style="display:none">
+      <div class="res-card-head">💡 Counter Offer</div>
+      <div class="res-card-body">
+        <div class="counter-offer">
+          <strong>What we can offer instead</strong>
+          <span id="counterText"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Strengths & Concerns -->
+    <div class="res-card">
+      <div class="res-card-head">⚖️ Strengths & Concerns</div>
+      <div class="res-card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--success);margin-bottom:8px;">Strengths</div>
+            <ul class="item-list strengths" id="strengthsList"></ul>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--danger);margin-bottom:8px;">Concerns</div>
+            <ul class="item-list concerns" id="concernsList"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fraud / Regulatory flags -->
+    <div class="res-card" id="flagsCard" style="display:none">
+      <div class="res-card-head">🚨 Flags</div>
+      <div class="res-card-body" id="flagsBody"></div>
+    </div>
+
+    <!-- Documentation -->
+    <div class="res-card">
+      <div class="res-card-head">📁 Documentation Required</div>
+      <div class="res-card-body">
+        <ul class="item-list docs" id="docsList"></ul>
+      </div>
+    </div>
+
+  </div><!-- /result-panel -->
+</div>
+</div><!-- /grid -->
+</div><!-- /page -->
 
 <script>
-const loanInfo = {
-  "Personal Loan":         "No collateral needed. CIBIL 700+ required. Max tenure 5 years.",
-  "Home Loan":             "Max LTV 80%. Legal title check mandatory. Tenure up to 25 years.",
-  "Car Loan":              "Vehicle is collateral. LTV up to 85%. Max tenure 7 years.",
-  "Gold Loan":             "No CIBIL required. Gold purity checked. RBI LTV cap 75%. Max 12 months.",
-  "Business Loan":         "GST + 12-month bank statement needed. Min 2-year business vintage.",
-  "Loan Against Property": "LTV max 65%. Property must be dispute-free. Up to 15 years.",
-  "Two-Wheeler Loan":      "Vehicle invoice needed. LTV up to 90%. Max 4 years.",
-  "Education Loan":        "Collateral needed above Rs 7.5L. Co-borrower income considered.",
-  "Microfinance / JLG Loan":"No CIBIL required. Group guarantee model. Max Rs 3L."
+const PRODUCT_HINTS = {
+  "Personal Loan":           "💳 <strong>Underwriting focus:</strong> Income stability + clean credit. FOIR must stay below 50%. No collateral required. Min CIBIL 700.",
+  "Home Loan":               "🏠 <strong>LTV max 80%</strong> of market value. EC 30 years + approved plan mandatory. RERA registration preferred. Min CIBIL 650.",
+  "Car Loan":                "🚗 <strong>LTV max 85%</strong> on ex-showroom price. Insurance mandatory. Hypothecation in RC. Min CIBIL 680.",
+  "Gold Loan":               "🥇 <strong>RBI cap: LTV max 75%</strong> on hallmark value. No CIBIL required. 18–22 karat only. Enter gold value in collateral field.",
+  "Business Loan":           "🏢 <strong>Business vintage min 2 years.</strong> GST returns 12m + audited financials required. Banking turnover ratio checked. Min CIBIL 680.",
+  "Loan Against Property":   "🏗️ <strong>LTV max 65%.</strong> Property must be encumbrance-free. EC 30 years. Rental income counted at 70%. Min CIBIL 650.",
+  "Two-Wheeler Loan":        "🛵 <strong>LTV max 90%</strong> on-road price. Insurance mandatory. Local stability matters. Min CIBIL 650.",
+  "Education Loan":          "🎓 <strong>Institution ranking matters.</strong> Collateral required above Rs 7.5L. Co-borrower income used for FOIR. Moratorium during study+1 yr.",
+  "Microfinance / JLG Loan": "🤝 <strong>RBI cap: Rs 1.25L per borrower.</strong> JLG group 4–10 members. No overlapping MFI loans (MFIN check). Rural/semi-urban only."
 };
-const needsCollateral = ["Home Loan","Car Loan","Gold Loan","Loan Against Property","Two-Wheeler Loan","Education Loan"];
-const needsBiz  = ["Business Loan"];
-const noCibil   = ["Gold Loan","Microfinance / JLG Loan"];
 
-document.getElementById('loanTabs').addEventListener('click', e => {
-  const tab = e.target.closest('.tab');
-  if (!tab) return;
+const COLLATERAL_HINTS = {
+  "Home Loan": "LTV max 80% — enter market value of property",
+  "Car Loan": "LTV max 85% — enter ex-showroom price of vehicle",
+  "Gold Loan": "LTV max 75% (RBI) — enter gold hallmark valuation",
+  "Loan Against Property": "LTV max 65% — enter market value of property",
+  "Two-Wheeler Loan": "LTV max 90% — enter on-road price",
+};
+
+const COLLATERAL_REQUIRED = ["Home Loan","Car Loan","Gold Loan","Loan Against Property","Two-Wheeler Loan"];
+const BIZ_TYPES = ["Business Owner / Proprietor","Partnership / Director","Self-Employed Professional","Freelancer / Consultant"];
+
+function setLoanType(el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  const type = tab.dataset.type;
-  document.getElementById('loanTypeInput').value = type;
-  document.getElementById('loanTypeBadge').textContent = type;
-  document.getElementById('hintText').textContent = '💡 ' + loanInfo[type];
-  document.getElementById('collateralGroup').classList.toggle('hidden', !needsCollateral.includes(type));
-  document.getElementById('vintageGroup').classList.toggle('hidden', !needsBiz.includes(type));
-  const nc = noCibil.includes(type);
-  document.getElementById('cibilNote').textContent = nc ? '(Not required for this product)' : '';
-  const ci = document.getElementById('cibilInput');
-  ci.required  = !nc;
-  ci.placeholder = nc ? '0 (Not required)' : 'e.g. 740';
-  if (nc) ci.value = '0'; else ci.value = '';
-  document.getElementById('collateralLabel').textContent =
-    type === 'Gold Loan' ? 'Gold Value (₹)' : 'Collateral / Property Value (₹)';
-  document.getElementById('result-section').style.display = 'none';
+  el.classList.add('active');
+  const lt = el.dataset.lt;
+  document.getElementById('loanTypeInput').value = lt;
+
+  // Hint
+  const hint = document.getElementById('productHint');
+  const spacer = document.getElementById('hintSpacer');
+  if (PRODUCT_HINTS[lt]) {
+    hint.innerHTML = PRODUCT_HINTS[lt];
+    hint.classList.add('visible');
+    spacer.style.display = '';
+  } else {
+    hint.classList.remove('visible');
+    spacer.style.display = 'none';
+  }
+
+  // Collateral field
+  const cf = document.getElementById('collateralField');
+  if (COLLATERAL_REQUIRED.includes(lt)) {
+    cf.style.display = '';
+    document.getElementById('collateralHint').textContent = COLLATERAL_HINTS[lt] || '';
+  } else {
+    cf.style.display = 'none';
+  }
+
+  // GST field
+  document.getElementById('gstField').style.display =
+    (lt === 'Business Loan' || lt === 'Loan Against Property') ? '' : 'none';
+}
+
+// Show/hide business vintage based on employment type
+document.querySelector('[name=employment_type]').addEventListener('change', function() {
+  const lt = document.getElementById('loanTypeInput').value;
+  const isBiz = BIZ_TYPES.includes(this.value) || lt === 'Business Loan';
+  document.getElementById('bizVintageField').style.display = isBiz ? '' : 'none';
+  document.getElementById('gstField').style.display = (isBiz || lt === 'Loan Against Property') ? '' : 'none';
 });
 
-document.getElementById('loanForm').addEventListener('submit', async e => {
+// Init
+setLoanType(document.querySelector('.tab.active'));
+
+// FORM SUBMIT
+document.getElementById('loanForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const btn = document.getElementById('submitBtn');
+  const loader = document.getElementById('loader');
+  const panel = document.getElementById('resultPanel');
+
   btn.disabled = true;
-  document.getElementById('btnText').textContent = 'Analyzing…';
-  document.getElementById('loader').style.display = 'block';
-  document.getElementById('result-section').style.display = 'none';
-  document.getElementById('error-box').style.display   = 'none';
-  document.getElementById('success-result').style.display = 'none';
+  btn.innerHTML = '⏳ Analyzing…';
+  loader.classList.add('visible');
+  panel.classList.remove('visible');
 
   try {
-    const res  = await fetch('/analyze-loan', {method:'POST', body: new FormData(e.target)});
+    const fd = new FormData(this);
+    const res = await fetch('/analyze-loan', { method:'POST', body: fd });
     const data = await res.json();
-
-    if (!res.ok || data.error) {
-      document.getElementById('result-section').style.display = 'block';
-      document.getElementById('error-box').style.display = 'block';
-      document.getElementById('error-box').textContent = '❌ ' + (data.error || 'An error occurred. Please try again.');
-    } else {
-      showResult(data);
-    }
+    renderResult(data);
+    panel.classList.add('visible');
+    panel.scrollIntoView({ behavior:'smooth', block:'start' });
   } catch(err) {
-    document.getElementById('result-section').style.display = 'block';
-    document.getElementById('error-box').style.display = 'block';
-    document.getElementById('error-box').textContent = '❌ Network error: ' + err.message;
+    alert('Network error. Please retry.');
   } finally {
     btn.disabled = false;
-    document.getElementById('btnText').textContent = '⚡ Analyze with AI';
-    document.getElementById('loader').style.display = 'none';
-    document.getElementById('result-section').scrollIntoView({behavior:'smooth', block:'start'});
+    btn.innerHTML = '⚡ Analyze with AI';
+    loader.classList.remove('visible');
   }
 });
 
 function fmt(n) { return '₹' + Number(n).toLocaleString('en-IN'); }
 
-function showResult(d) {
-  document.getElementById('result-section').style.display = 'block';
-  document.getElementById('success-result').style.display = 'block';
+function renderResult(d) {
+  const dec = d.decision || 'REJECTED';
 
-  // App ID
-  document.getElementById('res-app-id').textContent = d.application_id || '—';
-  document.getElementById('res-ts').textContent = new Date().toLocaleString('en-IN', {
-    day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'
-  });
+  // Decision header
+  const hdr = document.getElementById('decisionHeader');
+  hdr.className = 'decision-header ' + dec;
+  const icons = { APPROVED:'✅', REJECTED:'❌', CONDITIONAL:'⚠️' };
+  document.getElementById('dhBadge').textContent = icons[dec] + '  ' + dec;
+  document.getElementById('dhAppId').textContent = d.application_id || '';
+  document.getElementById('dhName').textContent = (d.applicant_name || '') + ' — ' + (d.loan_type || '');
 
-  // Decision banner
-  const banner = document.getElementById('decision-banner');
-  banner.className = 'banner ' + (d.decision || '').toLowerCase();
-  const icons  = {APPROVED:'✅', REJECTED:'❌', CONDITIONAL:'⚠️'};
-  const labels = {APPROVED:'Loan Approved', REJECTED:'Loan Rejected', CONDITIONAL:'Conditional Approval'};
-  document.getElementById('dec-icon').textContent  = icons[d.decision]  || '📋';
-  document.getElementById('dec-title').textContent = labels[d.decision] || d.decision;
-  document.getElementById('dec-reason').textContent = d.reason || '';
+  // Header metrics
+  const metrics = [
+    { val: fmt(d.approved_amount || 0), lbl: 'Approved Amount' },
+    { val: (d.recommended_interest_rate || d.computed_rate || '—') + '%', lbl: 'Interest Rate' },
+    { val: fmt(d.emi_estimate || 0) + '/mo', lbl: 'Est. EMI' },
+    { val: (d.foir || 0) + '%', lbl: 'FOIR' },
+    { val: d.risk_score || '—', lbl: 'Risk Score' },
+  ];
+  document.getElementById('dhMetrics').innerHTML = metrics.map(m =>
+    `<div class="dh-metric"><div class="val">${m.val}</div><div class="lbl">${m.lbl}</div></div>`
+  ).join('');
 
-  // Stats
-  document.getElementById('s-type').textContent   = d.loan_type || '—';
-  document.getElementById('s-amount').textContent = d.approved_amount > 0 ? fmt(d.approved_amount) : 'N/A';
-  document.getElementById('s-rate').textContent   = d.approved_amount > 0 ? d.recommended_interest_rate + '%' : 'N/A';
-  document.getElementById('s-emi').textContent    = d.emi_estimate > 0 ? fmt(d.emi_estimate) : 'N/A';
-  document.getElementById('s-foir').textContent   = d.foir + '%';
+  // Policy violations
+  const pvCard = document.getElementById('policyCard');
+  const pvList = document.getElementById('policyList');
+  if (d.policy_violations && d.policy_violations.length > 0) {
+    pvCard.style.display = '';
+    pvList.innerHTML = d.policy_violations.map(v => `<li>${v}</li>`).join('');
+  } else {
+    pvCard.style.display = 'none';
+  }
 
-  // Strengths / Concerns
-  document.getElementById('strengths-list').innerHTML =
-    (d.strengths || []).map(s => `<div class="list-item"><span class="dot g"></span>${s}</div>`).join('');
-  document.getElementById('concerns-list').innerHTML =
-    (d.concerns || []).map(c => `<div class="list-item"><span class="dot r"></span>${c}</div>`).join('');
+  // Metrics row
+  const fClr = (d.foir || 0) > 55 ? 'danger' : (d.foir || 0) > 45 ? 'warn' : 'success';
+  const cClr = (d.cibil_score || 0) < 650 ? 'danger' : (d.cibil_score || 0) < 700 ? 'warn' : 'success';
+  document.getElementById('metricsRow').innerHTML = [
+    { val: (d.foir||0)+'%', lbl:'FOIR', cls:fClr },
+    { val: d.ltv ? d.ltv+'%' : 'N/A', lbl:'LTV', cls:''},
+    { val: fmt(d.processing_fee||0), lbl:'Processing Fee', cls:''},
+    { val: (d.max_eligible_tenure||0)+' mo', lbl:'Max Tenure', cls:''},
+    { val: d.risk_level || '—', lbl:'Risk Level', cls:dec==='REJECTED'?'danger':dec==='CONDITIONAL'?'warn':'success'},
+    { val: (d.computed_rate||0)+'%', lbl:'Risk-Computed Rate', cls:''},
+  ].map(m => `<div class="metric-box ${m.cls}"><div class="mv">${m.val}</div><div class="ml">${m.lbl}</div></div>`).join('');
 
-  // Docs
-  document.getElementById('docs-list').innerHTML =
-    (d.documentation_required || []).map(doc => `<span class="doc-chip">📄 ${doc}</span>`).join('');
+  // Bureau & cashflow
+  document.getElementById('bureauText').textContent = d.bureau_assessment || '—';
+  document.getElementById('cashflowText').textContent = d.cashflow_assessment || '—';
+
+  // Reason & recommendation
+  document.getElementById('reasonText').textContent = d.reason || '';
+  document.getElementById('recommendText').textContent = '→ ' + (d.recommendation || '');
+
+  // Counter offer
+  const cc = document.getElementById('counterCard');
+  if (d.counter_offer) {
+    cc.style.display = '';
+    document.getElementById('counterText').textContent = d.counter_offer;
+  } else { cc.style.display = 'none'; }
+
+  // Strengths & concerns
+  document.getElementById('strengthsList').innerHTML =
+    (d.strengths||[]).map(s=>`<li><span class="dot"></span>${s}</li>`).join('');
+  document.getElementById('concernsList').innerHTML =
+    (d.concerns||[]).map(c=>`<li><span class="dot"></span>${c}</li>`).join('');
 
   // Flags
-  let fl = '';
-  (d.fraud_flags || []).forEach(f => fl += `<div class="fraud-flag">🚩 ${f}</div>`);
-  (d.regulatory_flags || []).forEach(f => fl += `<div class="reg-flag">⚖️ ${f}</div>`);
-  document.getElementById('flags-section').innerHTML = fl;
+  const allFlags = [...(d.fraud_flags||[]).map(f=>'🔴 Fraud: '+f), ...(d.regulatory_flags||[]).map(f=>'🟡 Regulatory: '+f)];
+  const fc = document.getElementById('flagsCard');
+  if (allFlags.length > 0) {
+    fc.style.display = '';
+    document.getElementById('flagsBody').innerHTML =
+      `<ul class="item-list flags">${allFlags.map(f=>`<li><span class="dot"></span>${f}</li>`).join('')}</ul>`;
+  } else { fc.style.display = 'none'; }
 
-  // Recommendation
-  document.getElementById('rec-text').textContent = d.recommendation || '';
+  // Docs
+  document.getElementById('docsList').innerHTML =
+    (d.documentation_required||[]).map(doc=>`<li><span class="dot"></span>${doc}</li>`).join('');
 }
 </script>
 </body>
